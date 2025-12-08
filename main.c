@@ -7,7 +7,7 @@
 #define PRIMARY_AREA_FILENAME "PrimaryFile.txt"
 #define OVERFLOW_AREA_FILENAME "OverflowArea.txt"
 #define TEST_DATA_FILENAME "testData.txt"
-#define MAX_RECORD_LENGTH 31
+#define MAX_RECORD_LENGTH 31 //30 characters + \n
 #define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
 #define BLOCKING_FACTOR_INDEX 1000
@@ -17,8 +17,11 @@
 #define MAX_COMMAND_LENGTH 47
 #define MAX_MNEMONIC_LENGTH 7
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
+#define MAX_INT_LEN 10
+#define INDEX_FILE_POSITION_LENGHT MAX_INT_LEN+MAX_INT_LEN+1+1 //maxIntLen + maxIntLen + ";" + "\n"
 
-int numberOfPages =  0; //it is rather index than number (number = index+1)
+
+int numberOfPages =  2; //it is rather index than number (number = index+1)
 
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
@@ -93,23 +96,44 @@ int chackIsFileEmpty() {
     return isFileEmpty;
 }
 
-int insertCell() {
+//Index file view PAGE_ID;KEY
+    //so number of characters each is PAGE_ID LEN + KEY_LEN + 1 (";")
+
+int addPageToIndexFile(Page page) {
+    char buffor[MAX_RECORD_LENGTH + 2];
+    IndexEntry newIndexEntry;
+    newIndexEntry.key = page.cell[0].key; 
+    newIndexEntry.pageNumber = numberOfPages;
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "a+");
+    long offset = (long)(newIndexEntry.pageNumber) * INDEX_FILE_POSITION_LENGHT;
+    fseek(indexFile, offset, SEEK_SET);
+    fprintf(indexFile, "%010u;%010u\n", newIndexEntry.pageNumber, newIndexEntry.key);
+    fclose(indexFile);
+    return 0; 
+}
+
+int addPageToPrimaryFile(){
     return 1;
 }
 
 int createNewPage(Cell cell) {
     Page page;
     page.cell[0] = cell;
-    page.overflowPageId = 0
-    return 1;
+    page.overflowPageId = 0;
+    addPageToIndexFile(page);
+    addPageToPrimaryFile(page);
+    //write to index filr
+    //write to primary file
+    //return 0 if succseed
+    return 0;
 }
 
-int addCell(Cell cell) {
+int insertCell(Cell cell) {
     int isFileEmpty = chackIsFileEmpty();
     if (isFileEmpty) {
         createNewPage(cell);
     } else {
-        insertCell(cell);
+        (cell);
     }
     return 1;
 }
@@ -118,7 +142,7 @@ int addRecord(Record record) {
     Cell newCell;
     newCell.key = generateKey();
     newCell.record = record;
-    if (!addCell(newCell)) {
+    if (!insertCell(newCell)) {
         printf("Cell added succesfully\n");
         return 0;
     } else {
