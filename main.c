@@ -8,12 +8,14 @@
 #define OVERFLOW_AREA_FILENAME "OverflowArea.txt"
 #define TEST_DATA_FILENAME "testData.txt"
 #define MAX_RECORD_LENGTH 31
+#define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
 #define BLOCKING_FACTOR_INDEX 1000
 #define ALFA_FACTOR 0.5
 #define MAX_RECORDS _CRT_INT_MAX
 #define REORGANIZATION_OVERFLOW_SIZE 4
 #define MAX_COMMAND_LENGTH 47
+#define MAX_MNEMONIC_LENGTH 7
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
 
 typedef struct Record {
@@ -72,7 +74,32 @@ void printHelp() {
 }
 
 int processCommand(char* inputBuffor) {
-    return 1;
+    char debugRecord[MAX_RECORD_LENGTH] = {0};
+    char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
+    char firstArgument[MAX_RECORD_LENGTH] = {0};
+    char secondArgument[MAX_RECORD_LENGTH] = {0};
+    sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
+    if(strcmp(mnemonic, "DISP") == 0) {
+        printf("chuja\n");
+    } else if (strcmp(mnemonic, "ADDG") == 0) {
+        generateValue(debugRecord);
+        printf("%u : %s\n", generateKey(), debugRecord);
+    } else if (strcmp(mnemonic, "ADD") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "READR") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "DISPI") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "DEL") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "MOD") == 0) {
+        printf("%s, %s\n", firstArgument, secondArgument);
+    } else {
+        printf("Unknown mnemonic\n");
+        return 1;
+    }
+    
+    return 0;
 }
 
 void clearInputBufor(char* inputBufor) {
@@ -80,10 +107,6 @@ void clearInputBufor(char* inputBufor) {
         inputBufor[i] = 0;
     }
     return;
-}
-
-int processCommand(char* inputBuffor) {
-    return 1;
 }
 
 int commandLineLoop() {
@@ -94,7 +117,11 @@ int commandLineLoop() {
     printf("Write exit to exit the program\n");
     while(!exit) {
         printf("SBD_DISK\\: ");
-        scanf("%s", inputBufor);
+        fgets(inputBufor, MAX_COMMAND_LENGTH, stdin);
+        size_t len = strlen(inputBufor);
+        if (len > 0 && inputBufor[len-1] == '\n') {
+             inputBufor[len-1] = '\0';
+        }
         if(!strcmp(inputBufor, "help")) {
             printHelp();
         } else if (!strcmp(inputBufor, "exit")) {
