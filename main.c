@@ -18,6 +18,8 @@
 #define MAX_MNEMONIC_LENGTH 7
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
 
+int numberOfPages =  0; //it is rather index than number (number = index+1)
+
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
 } Record;
@@ -73,6 +75,72 @@ void printHelp() {
     return;
 }
 
+int chackIsFileEmpty() {
+    long long fileSize = 0;
+    int isFileEmpty = 1;
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
+    fseek(indexFile, 0, SEEK_END);
+    fileSize = ftell(indexFile);
+    if(fileSize) {
+        printf("File exists and is not empty\n");
+        isFileEmpty = 0;
+        
+    } else {
+        printf("File is empty\n");
+        isFileEmpty = 1;
+    }
+    fclose(indexFile);
+    return isFileEmpty;
+}
+
+int insertCell() {
+    return 1;
+}
+
+int createNewPage(Cell cell) {
+    Page page;
+    page.cell[0] = cell;
+    page.overflowPageId = 0
+    return 1;
+}
+
+int addCell(Cell cell) {
+    int isFileEmpty = chackIsFileEmpty();
+    if (isFileEmpty) {
+        createNewPage(cell);
+    } else {
+        insertCell(cell);
+    }
+    return 1;
+}
+
+int addRecord(Record record) {
+    Cell newCell;
+    newCell.key = generateKey();
+    newCell.record = record;
+    if (!addCell(newCell)) {
+        printf("Cell added succesfully\n");
+        return 0;
+    } else {
+        printf("Error - cell not added\n");
+        return 1;
+    }
+    return 1;
+}
+
+void CommandADDGProcess() {
+    //int initialCreation = isFileEmpty();
+    char dataBuffer[MAX_RECORD_LENGTH] = {0};
+    generateValue(dataBuffer);
+    Record newRecord;
+    strncpy(newRecord.data, dataBuffer, MAX_RECORD_LENGTH);
+    if (!addRecord(newRecord)) {
+        printf("Record added succesfully\n");
+    } else {
+        printf("Error - record not added\n");
+    }
+}
+
 int processCommand(char* inputBuffor) {
     char debugRecord[MAX_RECORD_LENGTH] = {0};
     char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
@@ -82,8 +150,7 @@ int processCommand(char* inputBuffor) {
     if(strcmp(mnemonic, "DISP") == 0) {
         printf("chuja\n");
     } else if (strcmp(mnemonic, "ADDG") == 0) {
-        generateValue(debugRecord);
-        printf("%u : %s\n", generateKey(), debugRecord);
+        CommandADDGProcess();
     } else if (strcmp(mnemonic, "ADD") == 0) {
         printf("%s\n", firstArgument);
     } else if (strcmp(mnemonic, "READR") == 0) {
@@ -133,8 +200,6 @@ int commandLineLoop() {
     }
     printf("Program ended by the user\n");
 }
-
-
 
 int main() {
     int decision = 0;
