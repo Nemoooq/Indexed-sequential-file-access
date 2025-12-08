@@ -44,6 +44,11 @@ typedef struct IndexEntry {
     unsigned int pageNumber;
 } IndexEntry;
 
+typedef struct IndexPage {
+    IndexEntry indexEntry[BLOCKING_FACTOR_PAGE];
+    unsigned int nextIndexPageId;
+} IndexPage;
+
 int generateKey() {
     //because RAND_MAX = 0x7FFF
     unsigned int firstPart = (unsigned int)rand();
@@ -98,18 +103,17 @@ int chackIsFileEmpty() {
     return isFileEmpty;
 }
 
-//Index file view PAGE_ID;KEY
-    //so number of characters each is PAGE_ID LEN + KEY_LEN + 1 (";")
-
-int addPageToIndexFile(Page page) {
-    char buffor[MAX_RECORD_LENGTH + 2];
-    IndexEntry newIndexEntry;
-    newIndexEntry.key = page.cell[0].key; 
-    newIndexEntry.pageNumber = numberOfPages;
-    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "a+");
-    long offset = (long)(newIndexEntry.pageNumber) * INDEX_FILE_POSITION_LENGHT;
+int addPageToIndexFile(IndexPage page) {
+    unsigned int pageIndex = numberOfPages; 
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r+b");
+    long pageSize = (long)BLOCKING_FACTOR_PAGE * INDEX_FILE_POSITION_LENGHT;
+    long offset = (long)pageIndex * pageSize;
     fseek(indexFile, offset, SEEK_SET);
-    fprintf(indexFile, "%010u;%010u\n", newIndexEntry.pageNumber, newIndexEntry.key);
+    for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        unsigned int currentKey = page.indexEntry[i].key;
+        unsigned int currentPageNo = page.indexEntry[i].pageNumber;
+        fprintf(indexFile, "%010u;%010u\n", currentPageNo, currentKey); 
+    }
     fclose(indexFile);
     return 0; 
 }
@@ -140,10 +144,18 @@ int addPageToPrimaryFile(Page page) {
 
 int createNewPage(Cell cell) {
     Page newPage;
+    IndexPage newIndexPage;
+    memset(&newIndexPage, 0, sizeof(IndexPage));
     memset(&newPage, 0, sizeof(Page));
     newPage.cell[0] = cell;
-    if (addPageToIndexFile(newPage) != 0) return 1;
-    if (addPageToPrimaryFile(newPage) != 0) return 1;
+    newIndexPage.indexEntry[0].key = cell.key;
+    newIndexPage.indexEntry[0].pageNumber = numberOfPages;
+    if (addPageToIndexFile(newIndexPage) != 0) {
+        return 1;
+    }
+    if (addPageToPrimaryFile(newPage) != 0) { 
+        return 1;
+    }
     numberOfPages++; 
     return 0;
 }
