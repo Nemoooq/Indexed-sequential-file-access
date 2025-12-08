@@ -7,7 +7,7 @@
 #define PRIMARY_AREA_FILENAME "PrimaryFile.txt"
 #define OVERFLOW_AREA_FILENAME "OverflowArea.txt"
 #define TEST_DATA_FILENAME "testData.txt"
-#define MAX_RECORD_LENGTH 31 //30 characters + \n
+#define MAX_RECORD_LENGTH 30 //30 characters + \n
 #define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
 #define BLOCKING_FACTOR_INDEX 1000
@@ -19,9 +19,11 @@
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
 #define MAX_INT_LEN 10
 #define INDEX_FILE_POSITION_LENGHT MAX_INT_LEN+MAX_INT_LEN+1+1 //maxIntLen + maxIntLen + ";" + "\n"
+#define OVERFLOW_AREA_RATIO 0.2 
+#define PRIMARY_RECORD_LENGTH 42
+#define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 
-
-int numberOfPages =  2; //it is rather index than number (number = index+1)
+int numberOfPages =  0; //it is rather index than number (number = index+1)
 
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
@@ -112,20 +114,41 @@ int addPageToIndexFile(Page page) {
     return 0; 
 }
 
-int addPageToPrimaryFile(){
-    return 1;
+int addPageToPrimaryFile(Page page) {
+    unsigned int pageIndex = numberOfPages; 
+    FILE* primaryFile = fopen(PRIMARY_AREA_FILENAME, "r+b");
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)pageIndex * pageSize;
+    fseek(primaryFile, offset, SEEK_SET);
+    for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        unsigned int currentKey;
+        const char* currentData;
+        if (page.cell[i].key != 0) {
+            currentKey = page.cell[i].key;
+            currentData = page.cell[i].record.data;
+        } else {
+            currentKey = 0; 
+            currentData = ""; 
+        }
+
+        fprintf(primaryFile, "%010u;%-30.30s\n", currentKey, currentData); 
+    }
+    
+    fclose(primaryFile);
+    return 0;
 }
 
 int createNewPage(Cell cell) {
-    Page page;
-    page.cell[0] = cell;
-    page.overflowPageId = 0;
-    addPageToIndexFile(page);
-    addPageToPrimaryFile(page);
-    //write to index filr
-    //write to primary file
-    //return 0 if succseed
+    Page newPage;
+    newPage.cell[0] = cell;
+    newPage.overflowPageId = 0;
+    addPageToIndexFile(newPage);
+    addPageToPrimaryFile(newPage);
     return 0;
+}
+
+int insertCellToFile(Cell cell) {
+
 }
 
 int insertCell(Cell cell) {
@@ -133,7 +156,7 @@ int insertCell(Cell cell) {
     if (isFileEmpty) {
         createNewPage(cell);
     } else {
-        (cell);
+        insertCellToFile(cell);
     }
     return 1;
 }
