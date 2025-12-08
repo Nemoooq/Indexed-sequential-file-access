@@ -140,15 +140,16 @@ int addPageToPrimaryFile(Page page) {
 
 int createNewPage(Cell cell) {
     Page newPage;
+    memset(&newPage, 0, sizeof(Page));
     newPage.cell[0] = cell;
-    newPage.overflowPageId = 0;
-    addPageToIndexFile(newPage);
-    addPageToPrimaryFile(newPage);
+    if (addPageToIndexFile(newPage) != 0) return 1;
+    if (addPageToPrimaryFile(newPage) != 0) return 1;
+    numberOfPages++; 
     return 0;
 }
 
 int insertCellToFile(Cell cell) {
-
+    return 1;
 }
 
 int insertCell(Cell cell) {
