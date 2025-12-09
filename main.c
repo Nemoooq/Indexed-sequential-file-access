@@ -22,7 +22,8 @@
 #define PRIMARY_RECORD_LENGTH 42
 #define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 
-int numberOfPages =  0; //it is rather index than number (number = index+1)
+unsigned int numberOfPages =  0; //it is rather index than number (number = index+1)
+unsigned int currentOverflowIndex = 0;
 
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
@@ -31,11 +32,11 @@ typedef struct Record {
 typedef struct Cell {
     unsigned int key;
     Record record;
+    unsigned int overflowPointer;
 } Cell;
 
 typedef struct Page {
     Cell cell[BLOCKING_FACTOR_PAGE];
-    unsigned int overflowPageId;
 } Page;
 
 typedef struct IndexEntry {
@@ -126,15 +127,17 @@ int addPageToPrimaryFile(Page page) {
     for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         unsigned int currentKey;
         const char* currentData;
+        unsigned int currentOverflowPointer;
         if (page.cell[i].key != 0) {
             currentKey = page.cell[i].key;
             currentData = page.cell[i].record.data;
+            currentOverflowPointer = page.cell[i].overflowPointer;
         } else {
             currentKey = 0; 
             currentData = ""; 
         }
 
-        fprintf(primaryFile, "%010u;%-30.30s\n", currentKey, currentData); 
+        fprintf(primaryFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer);
     }
     numberOfPages++;
     
@@ -242,6 +245,11 @@ int writePageToPrimary(Page page, unsigned int index) {
     return 0; 
 }
 
+int writeCellToOverflow(Cell cell) {
+    //to be implemented
+    return 0;
+}
+
 int insertCellToFile(Cell cell) {
     //getIndexOfPage() - done
     //getPage(index) - done
@@ -249,7 +257,9 @@ int insertCellToFile(Cell cell) {
     //if insert is successfull place Page back - done
     //if you cannot insert go to overflow
     Page readPage;
+    int isFitted = 0;
     int isInserted = 0;
+    unsigned int overflowPageIndex = 0;
     unsigned int indexOfPage = getIndexOfPageToInsert(cell.key);
     getPrimaryPage(&readPage, indexOfPage);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
@@ -258,14 +268,24 @@ int insertCellToFile(Cell cell) {
             strncpy(readPage.cell[i].record.data, cell.record.data, MAX_RECORD_LENGTH);
             isInserted = 1;
             break;
-        } else {
-            continue;
+        } else if (readPage.cell[i].key < cell.key) {
+            isFitted = 1;
+            for(int j = i+1; j < BLOCKING_FACTOR_PAGE; j++){
+                if (readPage.cell[j].key < cell.key) {
+                    isFitted = 0;
+                    break;
+                }
+            }
+            if (isFitted) {
+                readPage.cell[i].overflowPointer = currentOverflowIndex;
+            }
         }
     }
+
     if (isInserted) {
         writePageToPrimary(readPage, indexOfPage);
     } else {
-        writePageToOverflow();
+        writeCellToOverflow(cell);
     }
     
     return 1;
@@ -285,6 +305,7 @@ int addRecord(Record record) {
     Cell newCell;
     newCell.key = generateKey();
     newCell.record = record;
+    newCell.overflowPointer = 0;
     if (!insertCell(newCell)) {
         printf("Cell added succesfully\n");
         return 0;
@@ -314,7 +335,7 @@ int processCommand(char* inputBuffor) {
     char secondArgument[MAX_RECORD_LENGTH] = {0};
     sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
     if(strcmp(mnemonic, "DISP") == 0) {
-        printf("chuja\n");
+        printf("chuja\n"); 
     } else if (strcmp(mnemonic, "ADDG") == 0) {
         CommandADDGProcess();
     } else if (strcmp(mnemonic, "ADD") == 0) {
