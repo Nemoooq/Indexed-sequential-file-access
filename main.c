@@ -10,7 +10,6 @@
 #define MAX_RECORD_LENGTH 30 //30 characters + \n
 #define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
-#define BLOCKING_FACTOR_INDEX 1000
 #define ALFA_FACTOR 0.5
 #define MAX_RECORDS _CRT_INT_MAX
 #define REORGANIZATION_OVERFLOW_SIZE 4
@@ -137,6 +136,7 @@ int addPageToPrimaryFile(Page page) {
 
         fprintf(primaryFile, "%010u;%-30.30s\n", currentKey, currentData); 
     }
+    numberOfPages++;
     
     fclose(primaryFile);
     return 0;
@@ -160,7 +160,114 @@ int createNewPage(Cell cell) {
     return 0;
 }
 
+int getIndexPage(IndexPage* page, unsigned int index) {
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
+    long pageSize = (long)BLOCKING_FACTOR_PAGE * INDEX_FILE_POSITION_LENGHT;
+    long offset = (long)index * pageSize;
+    fseek(indexFile, offset, SEEK_SET);
+    memset(page, 0, sizeof(IndexPage));
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        unsigned int pageNo = 0;
+        unsigned int key = 0;
+        int result = fscanf(indexFile, "%%%10u;%%%10u\n", &pageNo, &key); 
+        if (result == 2) {
+            page->indexEntry[i].pageNumber = pageNo;
+            page->indexEntry[i].key = key;
+        } else if (result == EOF) {
+            printf("EOF\n");
+            break; 
+        }
+    }
+
+    fclose(indexFile);
+}
+
+unsigned int getIndexOfPageToInsert(unsigned int key) {
+    unsigned int currentPageIndex = 0;
+    unsigned int indexOfInsertion = 0;
+    IndexPage readPage;
+    IndexPage tmpReadPage;
+    getIndexPage(&readPage, currentPageIndex);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        if(key > readPage.indexEntry[i].key) {
+            if(key < readPage.indexEntry[i+1].key && i+1<=(BLOCKING_FACTOR_PAGE-1)) {
+                return readPage.indexEntry[i].pageNumber;
+            } else if (i+1 > (BLOCKING_FACTOR_PAGE-1)) {
+                getIndexPage(&tmpReadPage, currentPageIndex+1);
+                if (key < tmpReadPage.indexEntry[0].key) {
+                    return readPage.indexEntry[i].pageNumber;
+                }
+            }
+        }
+    }
+    return indexOfInsertion;
+}
+
+int getPrimaryPage(Page* page, unsigned int index) {
+    FILE* primaryFile = fopen(PRIMARY_AREA_FILENAME, "rb"); 
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)index * pageSize;
+    fseek(primaryFile, offset, SEEK_SET);
+    memset(page, 0, sizeof(Page)); 
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        char valueBuffer[MAX_RECORD_LENGTH + 1] = {0}; 
+        unsigned int key = 0;
+        int result = fscanf(primaryFile, "%10u;%30s\n", &key, valueBuffer); 
+        if (result == 2) {
+            page->cell[i].key = key;
+            strncpy(page->cell[i].record.data, valueBuffer, MAX_RECORD_LENGTH);
+            page->cell[i].record.data[MAX_RECORD_LENGTH - 1] = '\0';
+            
+        } else if (result == EOF) {
+            printf("EOF\n");
+            break; 
+        }
+    }
+    fclose(primaryFile);
+    return 0;
+}
+
+int writePageToPrimary(Page page, unsigned int index) {
+    FILE* primaryFile = fopen(PRIMARY_AREA_FILENAME, "r+b");
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)index * pageSize;
+    fseek(primaryFile, offset, SEEK_SET);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        unsigned int currentKey = page.cell[i].key;
+        const char* currentData = page.cell[i].record.data;
+        fprintf(primaryFile, "%010u;%-30.30s\n", currentKey, currentData); 
+    }
+    fclose(primaryFile);
+    
+    return 0; 
+}
+
 int insertCellToFile(Cell cell) {
+    //getIndexOfPage() - done
+    //getPage(index) - done
+    //tryToInsert() - done
+    //if insert is successfull place Page back - done
+    //if you cannot insert go to overflow
+    Page readPage;
+    int isInserted = 0;
+    unsigned int indexOfPage = getIndexOfPageToInsert(cell.key);
+    getPrimaryPage(&readPage, indexOfPage);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        if(readPage.cell[i].key == 0) {
+            readPage.cell[i].key = cell.key;
+            strncpy(readPage.cell[i].record.data, cell.record.data, MAX_RECORD_LENGTH);
+            isInserted = 1;
+            break;
+        } else {
+            continue;
+        }
+    }
+    if (isInserted) {
+        writePageToPrimary(readPage, indexOfPage);
+    } else {
+        writePageToOverflow();
+    }
+    
     return 1;
 }
 
@@ -171,7 +278,7 @@ int insertCell(Cell cell) {
     } else {
         insertCellToFile(cell);
     }
-    return 1;
+    return 0;
 }
 
 int addRecord(Record record) {
@@ -189,7 +296,6 @@ int addRecord(Record record) {
 }
 
 void CommandADDGProcess() {
-    //int initialCreation = isFileEmpty();
     char dataBuffer[MAX_RECORD_LENGTH] = {0};
     generateValue(dataBuffer);
     Record newRecord;
