@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <math.h>
 
 #define PAGES_INDEXES_FILENAME "IndexFile.txt"
 #define PRIMARY_AREA_FILENAME "PrimaryFile.txt"
@@ -19,11 +20,11 @@
 #define MAX_INT_LEN 10
 #define INDEX_FILE_POSITION_LENGHT MAX_INT_LEN+MAX_INT_LEN+1+1 //maxIntLen + maxIntLen + ";" + "\n"
 #define OVERFLOW_AREA_RATIO 0.2 
-#define PRIMARY_RECORD_LENGTH 42
+#define PRIMARY_RECORD_LENGTH 53 //10+10+30+3
 #define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 
 unsigned int numberOfPages =  0; //it is rather index than number (number = index+1)
-unsigned int currentOverflowIndex = 0;
+unsigned int currentOverflowIndex = 1;
 
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
@@ -49,6 +50,16 @@ typedef struct IndexPage {
     unsigned int nextIndexPageId;
 } IndexPage;
 
+int compare(const void* a, const void* b) {
+    Cell* cellA = (Cell*)a;
+    Cell* cellB = (Cell*)b;
+    if (cellA->key < cellB->key) {
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
 int generateKey() {
     //because RAND_MAX = 0x7FFF
     unsigned int firstPart = (unsigned int)rand();
@@ -71,6 +82,16 @@ char* generateValue(char* record) {
 
 int fileProcess() {
     return 1;
+}
+
+int allocateOverflowArea(unsigned int numberOfPages) {
+    FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
+    unsigned int overflowAreaSize = (unsigned int)fmax(ceil((numberOfPages * BLOCKING_FACTOR_PAGE * OVERFLOW_AREA_RATIO)),BLOCKING_FACTOR_PAGE);
+    for(unsigned int i = 0; i < overflowAreaSize; i++) {
+        fprintf(overflowFile, "%010u;%-30.30s;%010u\n", 0, "", 0);
+    }
+    fclose(overflowFile);
+    return 0;
 }
 
 void printHelp() {
@@ -135,11 +156,11 @@ int addPageToPrimaryFile(Page page) {
         } else {
             currentKey = 0; 
             currentData = ""; 
+            currentOverflowPointer = 0;
         }
 
         fprintf(primaryFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer);
     }
-    numberOfPages++;
     
     fclose(primaryFile);
     return 0;
@@ -159,7 +180,7 @@ int createNewPage(Cell cell) {
     if (addPageToPrimaryFile(newPage) != 0) { 
         return 1;
     }
-    numberOfPages++; 
+    allocateOverflowArea(numberOfPages+1);
     return 0;
 }
 
@@ -177,8 +198,9 @@ int getIndexPage(IndexPage* page, unsigned int index) {
             page->indexEntry[i].pageNumber = pageNo;
             page->indexEntry[i].key = key;
         } else if (result == EOF) {
-            printf("EOF\n");
-            break; 
+            //printf("EOF\n");
+            fclose(indexFile);
+            return 1;
         }
     }
 
@@ -211,21 +233,22 @@ int getPrimaryPage(Page* page, unsigned int index) {
     long pageSize = (long)PRIMARY_PAGE_LENGTH;
     long offset = (long)index * pageSize;
     fseek(primaryFile, offset, SEEK_SET);
-    memset(page, 0, sizeof(Page)); 
+    memset(page, 0, sizeof(Page));  
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
         char valueBuffer[MAX_RECORD_LENGTH + 1] = {0}; 
         unsigned int key = 0;
-        int result = fscanf(primaryFile, "%10u;%30s\n", &key, valueBuffer); 
-        if (result == 2) {
+        unsigned int currentOverflowPointer = {0};
+        int result = fscanf(primaryFile, "%010u;%30c;%010u\n", &key, valueBuffer, &currentOverflowPointer); 
+        if (result == 3) {
             page->cell[i].key = key;
             strncpy(page->cell[i].record.data, valueBuffer, MAX_RECORD_LENGTH);
-            page->cell[i].record.data[MAX_RECORD_LENGTH - 1] = '\0';
-            
+            page->cell[i].overflowPointer = currentOverflowPointer;
         } else if (result == EOF) {
-            printf("EOF\n");
+            //printf("EOF\n");
             break; 
         }
     }
+    
     fclose(primaryFile);
     return 0;
 }
@@ -238,57 +261,109 @@ int writePageToPrimary(Page page, unsigned int index) {
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
         unsigned int currentKey = page.cell[i].key;
         const char* currentData = page.cell[i].record.data;
-        fprintf(primaryFile, "%010u;%-30.30s\n", currentKey, currentData); 
+        unsigned int currentOverflowPointer = page.cell[i].overflowPointer;
+        fprintf(primaryFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer); 
     }
     fclose(primaryFile);
     
     return 0; 
 }
 
+int writePageToOverflowArea(Page page) {
+    FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)currentOverflowIndex * pageSize;
+    fseek(overflowFile, offset, SEEK_SET);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        unsigned int currentKey = page.cell[i].key;
+        const char* currentData = page.cell[i].record.data;
+        unsigned int currentOverflowPointer = page.cell[i].overflowPointer;
+        fprintf(overflowFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer); 
+    }
+    fclose(overflowFile);
+    return 0;
+}
+
+int readPageFromOverflowArea(Page page, unsigned int index) {
+    FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)index * pageSize;
+    fseek(overflowFile, offset, SEEK_SET);
+    memset(&page, 0, sizeof(Page));
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        char valueBuffer[MAX_RECORD_LENGTH + 1] = {0}; 
+        unsigned int key = 0;
+        unsigned int currentOverflowPointer = {0};
+        int result = fscanf(overflowFile, "%010u;%30c;%010u\n", &key, valueBuffer, &currentOverflowPointer); 
+        if (result == 3) {
+            page.cell[i].key = key;
+            strncpy(page.cell[i].record.data, valueBuffer, MAX_RECORD_LENGTH);
+            page.cell[i].overflowPointer = currentOverflowPointer;
+        } else if (result == EOF) {
+            //printf("EOF\n");
+            fclose(overflowFile);
+            return 0; 
+        }
+    }
+    return 1;
+}
+
 int writeCellToOverflow(Cell cell) {
-    //to be implemented
+    FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
+    Page readPage;
+    int isInserted = 0;
+    unsigned int index = 0;
+    while (!isInserted && readPageFromOverflowArea(readPage, index)) {
+        for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+            if (readPage.cell[i].key=0) {
+                readPage.cell[i].key = cell.key;
+                strncpy(readPage.cell[i].record.data, cell.record.data, MAX_RECORD_LENGTH);
+                readPage.cell[i].overflowPointer = 0;
+                isInserted = 1;
+            }
+        }
+        index++;
+    }
+    if(isInserted) {
+        writePageToOverflowArea(readPage);
+    }
+    fclose(overflowFile);
     return 0;
 }
 
 int insertCellToFile(Cell cell) {
-    //getIndexOfPage() - done
-    //getPage(index) - done
-    //tryToInsert() - done
-    //if insert is successfull place Page back - done
-    //if you cannot insert go to overflow
     Page readPage;
     int isFitted = 0;
     int isInserted = 0;
-    unsigned int overflowPageIndex = 0;
     unsigned int indexOfPage = getIndexOfPageToInsert(cell.key);
     getPrimaryPage(&readPage, indexOfPage);
+
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
-        if(readPage.cell[i].key == 0) {
+        if (readPage.cell[i].key == 0){
             readPage.cell[i].key = cell.key;
             strncpy(readPage.cell[i].record.data, cell.record.data, MAX_RECORD_LENGTH);
-            isInserted = 1;
+            readPage.cell[i].overflowPointer = 0;
             break;
-        } else if (readPage.cell[i].key < cell.key) {
-            isFitted = 1;
-            for(int j = i+1; j < BLOCKING_FACTOR_PAGE; j++){
-                if (readPage.cell[j].key < cell.key) {
-                    isFitted = 0;
-                    break;
-                }
-            }
-            if (isFitted) {
-                readPage.cell[i].overflowPointer = currentOverflowIndex;
-            }
+        } else if (!compare(&readPage.cell[i], &cell)) {        //if left is greater than right returns true
+            writeCellToOverflow(cell);
+            readPage.cell[i].overflowPointer = currentOverflowIndex;
+            currentOverflowIndex++;
+
+            //jeżeli rekord powinien byc wpisany w to miejsce to:
+            //sprawdzamy czy indeksOverflowPointer jest różny od 0
+            //jeżeli tak to szukamy go w obszarze overflow
+            //sprawdzamy czy jest wyższy od rekordu który chcemy dodać
+            //jeżeli tak to ustawiamy wskaznik overflow dodawanego rekordu na ten co jest w primary
+            //ten co ma być dodany wpisujemy w primary
+            //jeżeli nie to szukamy dalej w overflow
+
+            break;
         }
     }
 
-    if (isInserted) {
-        writePageToPrimary(readPage, indexOfPage);
-    } else {
-        writeCellToOverflow(cell);
-    }
-    
-    return 1;
+    writePageToPrimary(readPage,indexOfPage);
+
+    return 0;
 }
 
 int insertCell(Cell cell) {
@@ -307,10 +382,10 @@ int addRecord(Record record) {
     newCell.record = record;
     newCell.overflowPointer = 0;
     if (!insertCell(newCell)) {
-        printf("Cell added succesfully\n");
+        //printf("Cell added succesfully\n");
         return 0;
     } else {
-        printf("Error - cell not added\n");
+        //printf("Error - cell not added\n");
         return 1;
     }
     return 1;
@@ -322,13 +397,38 @@ void CommandADDGProcess() {
     Record newRecord;
     strncpy(newRecord.data, dataBuffer, MAX_RECORD_LENGTH);
     if (!addRecord(newRecord)) {
-        printf("Record added succesfully\n");
+       // printf("Record added succesfully\n");
     } else {
-        printf("Error - record not added\n");
+        //printf("Error - record not added\n");
     }
 }
 
+unsigned int countNumberOfPages() {
+    long long countedNumberOfPages = 0;
+    IndexPage readPage;
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
+    while(!feof(indexFile)){
+        getIndexPage(&readPage, countedNumberOfPages);
+        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+            if(readPage.indexEntry[i].key != 0) {
+                //printf("Key: %u\n", readPage.indexEntry[i].key);
+            } else {
+                fclose(indexFile);
+                return countedNumberOfPages;
+            }
+        }
+    }
+    fclose(indexFile);
+    return countedNumberOfPages;
+}
+
 int processCommand(char* inputBuffor) {
+    numberOfPages = 0;
+    if(!chackIsFileEmpty()) {
+        numberOfPages = countNumberOfPages();
+        allocateOverflowArea(numberOfPages+1);
+    }
+    printf("Number of pages: %u\n", numberOfPages); 
     char debugRecord[MAX_RECORD_LENGTH] = {0};
     char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
     char firstArgument[MAX_RECORD_LENGTH] = {0};
