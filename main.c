@@ -208,7 +208,7 @@ int getIndexPage(IndexPage* page, unsigned int index) {
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
         unsigned int pageNo = 0;
         unsigned int key = 0;
-        int result = fscanf(indexFile, "%%%10u;%%%10u\n", &pageNo, &key); 
+        int result = fscanf(indexFile, "%10u;%10u", &pageNo, &key); 
         if (result == 2) {
             page->indexEntry[i].pageNumber = pageNo;
             page->indexEntry[i].key = key;
@@ -250,18 +250,26 @@ unsigned int getIndexOfPageToInsert(unsigned int key) {
     unsigned int indexOfInsertion = 0;
     IndexPage readPage;
     IndexPage tmpReadPage;
-    getIndexPage(&readPage, currentPageIndex);
-    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
-        if(key > readPage.indexEntry[i].key) {
-            if(key < readPage.indexEntry[i+1].key && i+1<=(BLOCKING_FACTOR_PAGE-1)) {
-                return readPage.indexEntry[i].pageNumber;
-            } else if (i+1 > (BLOCKING_FACTOR_PAGE-1)) {
-                getIndexPage(&tmpReadPage, currentPageIndex+1);
-                if (key < tmpReadPage.indexEntry[0].key) {
-                    return readPage.indexEntry[i].pageNumber;
+    int isInserted = 0;
+    while(!isInserted) {
+        getIndexPage(&readPage, currentPageIndex);
+        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+            if(readPage.indexEntry[i].key == 0) {
+                indexOfInsertion = readPage.indexEntry[i].pageNumber;
+                isInserted = 1;
+                break;
+            } else if (readPage.indexEntry[i].key < key) {
+                if(i == 0) {
+                    indexOfInsertion = readPage.indexEntry[0].pageNumber;
+                    isInserted = 1;
+                } else if (i == BLOCKING_FACTOR_PAGE - 1 || readPage.indexEntry[i + 1].key > key){
+                    indexOfInsertion = readPage.indexEntry[i-1].pageNumber;
+                    isInserted = 1;
                 }
+                break;
             }
         }
+        currentPageIndex++;
     }
     return indexOfInsertion;
 }
@@ -340,7 +348,7 @@ int writePageToOverflowArea(Page page, unsigned int currentOverflowIndex) {
 
 int readPageFromOverflowArea(Page* page, unsigned int index) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "rb"); 
-    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long pageSize = (long)PRIMARY_RECORD_LENGTH;
     long offset = (long)index * pageSize;
     fseek(overflowFile, offset, SEEK_SET);
     memset(page, 0, sizeof(Page));  
@@ -761,7 +769,7 @@ void reorganiseFile(){
                 memset(primaryPage.cell[i].record.data, 0, MAX_RECORD_LENGTH);
                 newPageSubIndex++;
             } else {
-                newPrimaryPage.cell[i] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
+                newPrimaryPage.cell[newPageSubIndex] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
                 isTakenFromOVerflow = 1;
                 newPageSubIndex++;
             }
@@ -773,6 +781,7 @@ void reorganiseFile(){
                 writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
                 indexPageIndex++;
                 newPageSubIndex = 0;
+                fillPageWithEmptyData(&newPrimaryPage);
             }
             if(isTakenFromOVerflow){
                 i--;
