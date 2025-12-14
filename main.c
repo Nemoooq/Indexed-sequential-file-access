@@ -7,13 +7,16 @@
 #define PAGES_INDEXES_FILENAME "IndexFile.txt"
 #define PRIMARY_AREA_FILENAME "PrimaryFile.txt"
 #define OVERFLOW_AREA_FILENAME "OverflowArea.txt"
+#define OVERFLOW_AREA_NEW_FILE "OverflowAreaNewFile.txt"
+#define PRIMARY_AREA_NEW_FILE "PrimaryFileNewFile.txt"
+#define INDEX_AREA_NEW_FILE "IndexFileNewFile.txt"
 #define TEST_DATA_FILENAME "testData.txt"
 #define MAX_RECORD_LENGTH 30 //30 characters + \n
 #define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
 #define ALFA_FACTOR 0.5
 #define MAX_RECORDS _CRT_INT_MAX
-#define REORGANIZATION_OVERFLOW_SIZE 4
+#define REORGANIZATION_OVERFLOW_SIZE 3
 #define MAX_COMMAND_LENGTH 47
 #define MAX_MNEMONIC_LENGTH 7
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
@@ -21,6 +24,7 @@
 #define INDEX_FILE_POSITION_LENGHT MAX_INT_LEN+MAX_INT_LEN+1+1 //maxIntLen + maxIntLen + ";" + "\n"
 #define OVERFLOW_AREA_RATIO 0.2 
 #define PRIMARY_RECORD_LENGTH 53 //10+10+30+3
+#define MAX_OVERFLOW_SIZE_WITHOUT_REORGANIZATION 3
 #define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -95,6 +99,17 @@ int allocateOverflowArea(unsigned int numberOfPages) {
     return 0;
 }
 
+int allocateNewOverflowArea(unsigned int numberOfPages) {
+    FILE* overflowFile = fopen(OVERFLOW_AREA_NEW_FILE, "r+b");
+    unsigned int overflowAreaSize = (unsigned int)fmax(ceil((numberOfPages * BLOCKING_FACTOR_PAGE * OVERFLOW_AREA_RATIO)),BLOCKING_FACTOR_PAGE);
+    for(unsigned int i = 0; i < overflowAreaSize; i++) {
+        fprintf(overflowFile, "%010u;%-30.30s;%010u\n", 0, "", 0);
+    }
+    fclose(overflowFile);
+    return 0;
+}
+
+
 void printHelp() {
     printf("Possible commands:\n");
     printf("- ADD [RECORD_VALUE] - adds specified record to the file\n");
@@ -108,21 +123,10 @@ void printHelp() {
 }
 
 int chackIsFileEmpty() {
-    long long fileSize = 0;
-    int isFileEmpty = 1;
-    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
-    fseek(indexFile, 0, SEEK_END);
-    fileSize = ftell(indexFile);
-    if(fileSize) {
-        //printf("File exists and is not empty\n");
-        isFileEmpty = 0;
-        
-    } else {
-        printf("File is empty\n");
-        isFileEmpty = 1;
+    if(numberOfPages) {
+        return 1;
     }
-    fclose(indexFile);
-    return isFileEmpty;
+    return 0;
 }
 
 int addPageToIndexFile(IndexPage page) {
@@ -208,6 +212,29 @@ int getIndexPage(IndexPage* page, unsigned int index) {
     fclose(indexFile);
 }
 
+int getNewIndexPage(IndexPage* page, unsigned int index) {
+    FILE* indexFile = fopen(INDEX_AREA_NEW_FILE, "r");
+    long pageSize = (long)BLOCKING_FACTOR_PAGE * INDEX_FILE_POSITION_LENGHT;
+    long offset = (long)index * pageSize;
+    fseek(indexFile, offset, SEEK_SET);
+    memset(page, 0, sizeof(IndexPage));
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        unsigned int pageNo = 0;
+        unsigned int key = 0;
+        int result = fscanf(indexFile, "%%%10u;%%%10u\n", &pageNo, &key); 
+        if (result == 2) {
+            page->indexEntry[i].pageNumber = pageNo;
+            page->indexEntry[i].key = key;
+        } else if (result == EOF) {
+            //printf("EOF\n");
+            fclose(indexFile);
+            return 1;
+        }
+    }
+
+    fclose(indexFile);
+}
+
 unsigned int getIndexOfPageToInsert(unsigned int key) {
     unsigned int currentPageIndex = 0;
     unsigned int indexOfInsertion = 0;
@@ -266,6 +293,22 @@ int writePageToPrimary(Page page, unsigned int index) {
         fprintf(primaryFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer); 
     }
     fclose(primaryFile);
+    
+    return 0; 
+}
+
+int writePageToNewPrimary(Page page, unsigned int index) {
+    FILE* newPrimaryFile = fopen(PRIMARY_AREA_NEW_FILE, "r+b");
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)index * pageSize;
+    fseek(newPrimaryFile, offset, SEEK_SET);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
+        unsigned int currentKey = page.cell[i].key;
+        const char* currentData = page.cell[i].record.data;
+        unsigned int currentOverflowPointer = page.cell[i].overflowPointer;
+        fprintf(newPrimaryFile, "%010u;%-30.30s;%010u\n", currentKey, currentData, currentOverflowPointer); 
+    }
+    fclose(newPrimaryFile);
     
     return 0; 
 }
@@ -384,6 +427,7 @@ int insertCellToFile(Cell cell) {
                 if (writeCellToOverflow(cell, overflowIndexForRecordInPrimaryFile, &newOverflowIndex) == 0) {
                     readPage.cell[i].overflowPointer = newOverflowIndex; 
                     writePageToPrimary(readPage, indexOfPage);
+                    mainOverflowCounter++;
                     return 0; 
                 } else {
                     printf("Error: Overflow Area is full.\n");
@@ -410,6 +454,7 @@ int insertCellToFile(Cell cell) {
                 
                                 }
                                 writePageToPrimary(readPage, indexOfPage);
+                                mainOverflowCounter++;
                                 return 0; 
                             } else {
                                 printf("Error: Overflow Area is full.\n");
@@ -511,6 +556,7 @@ void clearFiles() {
 
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
+    numberOfPages = countNumberOfPages();
     if(!chackIsFileEmpty()) {
         numberOfPages = countNumberOfPages();
     } else {
@@ -553,6 +599,156 @@ void clearInputBufor(char* inputBufor) {
     return;
 }
 
+void createFiles() {
+    FILE* newFileIndex = fopen(INDEX_AREA_NEW_FILE, "w");
+    FILE* newFilePrimary = fopen(PRIMARY_AREA_NEW_FILE, "w");
+    FILE* newFileOverflow = fopen(OVERFLOW_AREA_NEW_FILE, "w");
+    fclose(newFileIndex);
+    fclose(newFilePrimary);
+    fclose(newFileOverflow);
+    return;
+}
+
+void changeFilenames() {
+    remove(PAGES_INDEXES_FILENAME);
+    rename(INDEX_AREA_NEW_FILE, PAGES_INDEXES_FILENAME);
+    remove(PRIMARY_AREA_FILENAME);
+    rename(PRIMARY_AREA_NEW_FILE, PRIMARY_AREA_FILENAME);
+    remove(OVERFLOW_AREA_FILENAME);
+    rename(OVERFLOW_AREA_NEW_FILE, OVERFLOW_AREA_FILENAME);
+    return;
+}
+
+
+void fillPageWithEmptyData(Page* page) {
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        page->cell[i].key = 0;
+        page->cell[i].overflowPointer = 0;
+        memset(page->cell[i].record.data, 0, MAX_RECORD_LENGTH);
+    }
+    return;
+}
+
+void writeIndexEntryToIndexFile(IndexEntry indexEntry) {
+    IndexPage indexPage;
+    int inserted = 0;
+    unsigned int index;
+    while(!inserted) {
+        getIndexPage(&indexPage, index);
+        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+            if(indexPage.indexEntry->key == 0) {
+                indexPage.indexEntry->key = indexEntry.key;
+                indexPage.indexEntry->pageNumber = indexEntry.pageNumber;
+            }
+        }
+        index++;
+    }
+}
+
+void initIndexPageWithEmptyData(IndexPage* IndexEntry) {
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        IndexEntry->indexEntry->key = 0;
+        IndexEntry->indexEntry->pageNumber = 0;
+        IndexEntry->nextIndexPageId = 0;
+    }
+    return;
+}
+
+void writeIndexEntryToNewIndexFile(IndexEntry indexEntry) {
+    IndexPage indexPage;
+    int inserted = 0;
+    unsigned int index;
+    while(!inserted) {
+        if(getNewIndexPage(&indexPage, index)){
+            initIndexPageWithEmptyData(&indexPage);
+        }
+        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+            if(indexPage.indexEntry->key == 0) {
+                indexPage.indexEntry->key = indexEntry.key;
+                indexPage.indexEntry->pageNumber = indexEntry.pageNumber;
+                inserted = 1;
+            }
+        }
+        index++;
+    }
+}
+
+Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
+    unsigned int currentOverflowIndex = *previousPointer;
+    if (currentOverflowIndex == 0) {
+        Cell emptyCell = {0};
+        return emptyCell;
+    }
+    Page readOverflowPage;
+    readPageFromOverflowArea(&readOverflowPage, currentOverflowIndex - 1);
+    
+    if (readOverflowPage.cell[0].overflowPointer != 0) {
+        Cell cellToReturn = takeBiggestRecordAndShrink(&readOverflowPage.cell[0].overflowPointer);
+        writePageToOverflowArea(readOverflowPage, currentOverflowIndex); 
+        return cellToReturn;
+    } else {
+        Cell cellToReturn = readOverflowPage.cell[0];
+
+        readOverflowPage.cell[0].key = 0;
+        memset(readOverflowPage.cell[0].record.data, 0, MAX_RECORD_LENGTH);
+        
+        *previousPointer = 0; 
+
+        writePageToOverflowArea(readOverflowPage, currentOverflowIndex);
+        return cellToReturn;
+    }
+}
+
+void reorganiseFile(){
+    createFiles();
+    unsigned int primaryPageIndex = 0;
+    unsigned int indexPageIndex = 0;
+    unsigned int numberOfPagesToReorganise = countNumberOfPages()+1;
+    int isTakenFromOVerflow = 0;
+    int newPageSubIndex = 0;
+    while(primaryPageIndex < numberOfPagesToReorganise) {
+        isTakenFromOVerflow = 0;
+        Page primaryPage;
+        Page newPrimaryPage;
+        fillPageWithEmptyData(&newPrimaryPage);
+        getPrimaryPage(&primaryPage, primaryPageIndex);
+        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+            isTakenFromOVerflow = 0;
+            if (primaryPage.cell[i].overflowPointer == 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
+                newPrimaryPage.cell[newPageSubIndex] = primaryPage.cell[i];
+                primaryPage.cell[i].overflowPointer = 0;
+                primaryPage.cell[i].key = 0;
+                memset(primaryPage.cell[i].record.data, 0, MAX_RECORD_LENGTH);
+                newPageSubIndex++;
+            } else {
+                newPrimaryPage.cell[i] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
+                isTakenFromOVerflow = 1;
+                newPageSubIndex++;
+            }
+            if (newPageSubIndex >= (int)(BLOCKING_FACTOR_PAGE*ALFA_FACTOR)){
+                IndexEntry newIndexEntry;
+                newIndexEntry.key = newPrimaryPage.cell[0].key;
+                newIndexEntry.pageNumber = indexPageIndex;
+                writeIndexEntryToNewIndexFile(newIndexEntry);
+                writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
+                indexPageIndex++;
+                newPageSubIndex = 0;
+            }
+            if(isTakenFromOVerflow){
+                i--;
+            }
+        }
+        writePageToPrimary(primaryPage, primaryPageIndex);
+        primaryPageIndex++;
+    }
+
+    allocateNewOverflowArea(primaryPageIndex);
+
+    changeFilenames();
+    mainOverflowCounter = 0;
+    return;
+}
+
 int commandLineLoop() {
     int exit = 0;
     int showAfterOperation = 0;
@@ -560,6 +756,9 @@ int commandLineLoop() {
     printf("Write help for list of commands\n");
     printf("Write exit to exit the program\n");
     while(!exit) {
+        if(mainOverflowCounter >= REORGANIZATION_OVERFLOW_SIZE) {
+            reorganiseFile();
+        }
         printf("SBD_DISK\\: ");
         fgets(inputBufor, MAX_COMMAND_LENGTH, stdin);
         size_t len = strlen(inputBufor);
