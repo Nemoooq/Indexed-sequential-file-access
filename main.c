@@ -242,7 +242,7 @@ unsigned int getIndexOfPageToInsert(unsigned int key) {
     IndexPage tmpReadPage;
     getIndexPage(&readPage, currentPageIndex);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
-        if(key > readPage.indexEntry[i].key) {
+        if(key < readPage.indexEntry[i].key) {
             if(key < readPage.indexEntry[i+1].key && i+1<=(BLOCKING_FACTOR_PAGE-1)) {
                 return readPage.indexEntry[i].pageNumber;
             } else if (i+1 > (BLOCKING_FACTOR_PAGE-1)) {
@@ -699,6 +699,35 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     }
 }
 
+void writeIndexPageToIndexFile(IndexEntry IndexEntry, unsigned int indexPageIndex) {
+    IndexPage indexPage;
+    getNewIndexPage(&indexPage, indexPageIndex);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        if(indexPage.indexEntry[i].key == 0) {
+            indexPage.indexEntry[i].key = IndexEntry.key;
+            indexPage.indexEntry[i].pageNumber = IndexEntry.pageNumber;
+            break;
+        }
+    }
+    FILE* indexFile = fopen(INDEX_AREA_NEW_FILE, "r+"); // Zmień na tryb tekstowy 'r+'
+    
+    // Obliczenie długości strony w trybie tekstowym (np. 100 rekordów * 23 bajty/rekord)
+    long pageSize = (long)INDEX_FILE_POSITION_LENGHT; 
+    long offset = (long)indexPageIndex * pageSize;
+    
+    fseek(indexFile, offset, SEEK_SET);
+    
+    for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        unsigned int currentKey = indexPage.indexEntry[i].key;
+        unsigned int currentPageNo = indexPage.indexEntry[i].pageNumber;
+        fprintf(indexFile, "%010u;%010u\n", currentPageNo, currentKey); 
+    }
+    
+    fclose(indexFile);
+    return;
+    return;
+}
+
 void reorganiseFile(){
     createFiles();
     unsigned int primaryPageIndex = 0;
@@ -729,7 +758,7 @@ void reorganiseFile(){
                 IndexEntry newIndexEntry;
                 newIndexEntry.key = newPrimaryPage.cell[0].key;
                 newIndexEntry.pageNumber = indexPageIndex;
-                writeIndexEntryToNewIndexFile(newIndexEntry);
+                writeIndexPageToIndexFile(newIndexEntry, indexPageIndex);
                 writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
                 indexPageIndex++;
                 newPageSubIndex = 0;
@@ -741,7 +770,6 @@ void reorganiseFile(){
         writePageToPrimary(primaryPage, primaryPageIndex);
         primaryPageIndex++;
     }
-
     allocateNewOverflowArea(primaryPageIndex);
 
     changeFilenames();
