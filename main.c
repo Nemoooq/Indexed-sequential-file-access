@@ -123,9 +123,19 @@ void printHelp() {
 }
 
 int chackIsFileEmpty() {
-    if(numberOfPages) {
-        return 1;
+    long fileSize = 0;
+    int isFileEmpty = 1;
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
+    fseek(indexFile, 0, SEEK_END);
+    fileSize = ftell(indexFile);
+    fclose(indexFile);
+    if (fileSize > 0) {
+        isFileEmpty = 0;
+    } else {
+        isFileEmpty = 1;
     }
+    
+    return isFileEmpty;
     return 0;
 }
 
@@ -242,7 +252,7 @@ unsigned int getIndexOfPageToInsert(unsigned int key) {
     IndexPage tmpReadPage;
     getIndexPage(&readPage, currentPageIndex);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
-        if(key < readPage.indexEntry[i].key) {
+        if(key > readPage.indexEntry[i].key) {
             if(key < readPage.indexEntry[i+1].key && i+1<=(BLOCKING_FACTOR_PAGE-1)) {
                 return readPage.indexEntry[i].pageNumber;
             } else if (i+1 > (BLOCKING_FACTOR_PAGE-1)) {
@@ -526,7 +536,7 @@ void CommandADDGProcess() {
 }
 
 unsigned int countNumberOfPages() {
-    long long countedNumberOfPages = 0;
+    unsigned int countedNumberOfPages = 0;
     IndexPage readPage;
     FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
     while(!feof(indexFile)){
@@ -534,6 +544,7 @@ unsigned int countNumberOfPages() {
         for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
             if(readPage.indexEntry[i].key != 0) {
                 //printf("Key: %u\n", readPage.indexEntry[i].key);
+                countedNumberOfPages++;
             } else {
                 fclose(indexFile);
                 return countedNumberOfPages;
