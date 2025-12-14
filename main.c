@@ -246,33 +246,27 @@ int getNewIndexPage(IndexPage* page, unsigned int index) {
 }
 
 unsigned int getIndexOfPageToInsert(unsigned int key) {
-    unsigned int currentPageIndex = 0;
-    unsigned int indexOfInsertion = 0;
-    IndexPage readPage;
-    IndexPage tmpReadPage;
-    int isInserted = 0;
-    while(!isInserted) {
-        getIndexPage(&readPage, currentPageIndex);
-        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
-            if(readPage.indexEntry[i].key == 0) {
-                indexOfInsertion = readPage.indexEntry[i].pageNumber;
-                isInserted = 1;
-                break;
-            } else if (readPage.indexEntry[i].key < key) {
-                if(i == 0) {
-                    indexOfInsertion = readPage.indexEntry[0].pageNumber;
-                    isInserted = 1;
-                } else if (i == BLOCKING_FACTOR_PAGE - 1 || readPage.indexEntry[i + 1].key > key){
-                    indexOfInsertion = readPage.indexEntry[i-1].pageNumber;
-                    isInserted = 1;
+    IndexPage page;
+    for (int i = 0; i < numberOfPages; i++) {
+        getIndexPage(&page, i);
+
+        for (int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
+            if (page.indexEntry[j].key == 0)
+                return page.indexEntry[j - 1].pageNumber;
+            if (key <= page.indexEntry[j].key) {
+                if (j + 1 < BLOCKING_FACTOR_PAGE &&
+                    page.indexEntry[j + 1].key != 0 &&
+                    key <= page.indexEntry[j + 1].key) {
+                    continue;
                 }
-                break;
+                return page.indexEntry[j].pageNumber;
             }
         }
-        currentPageIndex++;
     }
-    return indexOfInsertion;
+    return page.indexEntry[BLOCKING_FACTOR_PAGE - 1].pageNumber;
 }
+
+
 
 int getPrimaryPage(Page* page, unsigned int index) {
     FILE* primaryFile = fopen(PRIMARY_AREA_FILENAME, "rb"); 
