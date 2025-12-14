@@ -339,7 +339,7 @@ int writeCellToOverflow(Cell cell, unsigned int overflowIndexInstert, unsigned i
             if (readPage.cell[i].key==0) {
                 readPage.cell[i].key = cell.key;
                 strncpy(readPage.cell[i].record.data, cell.record.data, MAX_RECORD_LENGTH);
-                readPage.cell[i].overflowPointer = 0;
+                readPage.cell[i].overflowPointer = cell.overflowPointer;
                 isInserted = 1;
                 break;
             }
@@ -373,6 +373,7 @@ int insertCellToFile(Cell cell) {
         } 
 
         if (readPage.cell[i].key < cell.key)  {
+            unsigned int currentPrimaryOverflowPointer = readPage.cell[i].overflowPointer;
             Cell* prevCell = &readPage.cell[i];
             if (prevCell->overflowPointer != 0 && findRecordInOverflowArea(prevCell->overflowPointer, cell, NULL)) {
                 printf("Record with that index exists in overflow area, aborting\n");
@@ -387,48 +388,49 @@ int insertCellToFile(Cell cell) {
                 } else {
                     printf("Error: Overflow Area is full.\n");
                     return 1;
-            }
-        }  else {
-                unsigned int currentPtr = prevCell->overflowPointer;
-                unsigned int previousPtr = i; 
-                Page overflowPage;
-                Cell* currentOverflowCell = NULL;
-                
-                while (currentPtr != 0) {
-                    readPageFromOverflowArea(&overflowPage, currentPtr - 1);
-                    currentOverflowCell = &overflowPage.cell[0];
-                
-                    if (currentOverflowCell->key > cell.key) { 
-                        cell.overflowPointer = currentOverflowCell->overflowPointer;
-                        if (writeCellToOverflow(cell, currentPtr, &newOverflowIndex) == 0) {
-                            
-                            if (previousPtr == i) { 
-                                prevCell->overflowPointer = newOverflowIndex;
-                            } else { 
-            
-                            }
-                            writePageToPrimary(readPage, indexOfPage);
-                            return 0; 
-                        } else {
-                            printf("Error: Overflow Area is full.\n");
-                            return 1;
-                        }
-                    } 
+                }
+            }  else {
+                    unsigned int currentPtr = prevCell->overflowPointer;
+                    unsigned int previousPtr = i; 
+                    Page overflowPage;
+                    Cell* currentOverflowCell = NULL;
                     
-                    previousPtr = currentPtr;
-                    currentPtr = currentOverflowCell->overflowPointer; 
-                }
+                    
+                    while (currentPtr != 0) {
+                        readPageFromOverflowArea(&overflowPage, currentPtr - 1);
+                        currentOverflowCell = &overflowPage.cell[0];
+                    
+                        if (currentOverflowCell->key > cell.key) { 
+                            cell.overflowPointer = currentPrimaryOverflowPointer;
+                            if (writeCellToOverflow(cell, currentPtr, &newOverflowIndex) == 0) {
+                                
+                                if (previousPtr == i) { 
+                                    prevCell->overflowPointer = newOverflowIndex;
+                                } else { 
+                
+                                }
+                                writePageToPrimary(readPage, indexOfPage);
+                                return 0; 
+                            } else {
+                                printf("Error: Overflow Area is full.\n");
+                                return 1;
+                            }
+                        } 
+                        
+                        previousPtr = currentPtr;
+                        currentPtr = currentOverflowCell->overflowPointer; 
+                    }
 
-                if (writeCellToOverflow(cell, 0, &newOverflowIndex) == 0) {
-                    currentOverflowCell->overflowPointer = newOverflowIndex;
-                    writePageToOverflowArea(overflowPage, previousPtr - 1); 
-                    writePageToPrimary(readPage, indexOfPage);
-                    return 0; 
-                } else {
-                    printf("Error: Overflow Area is full.\n");
-                    return 1;
+                    if (writeCellToOverflow(cell, 0, &newOverflowIndex) == 0) {
+                        currentOverflowCell->overflowPointer = newOverflowIndex;
+                        writePageToOverflowArea(overflowPage, previousPtr - 1); 
+                        writePageToPrimary(readPage, indexOfPage);
+                        return 0; 
+                    } else {
+                        printf("Error: Overflow Area is full.\n");
+                        return 1;
+                    }
                 }
-            }
         }
     }
 
