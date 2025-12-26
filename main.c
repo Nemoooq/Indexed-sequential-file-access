@@ -328,7 +328,11 @@ int writePageToNewPrimary(Page page, unsigned int index) {
 int writePageToOverflowArea(Page page, unsigned int currentOverflowIndex) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
     long pageSize = (long)PRIMARY_PAGE_LENGTH;
-    long offset = (long)(currentOverflowIndex-1) * pageSize;
+    int minusOne = 1;
+    if(currentOverflowIndex==0){
+        minusOne = 0;
+    }
+    long offset = (long)(currentOverflowIndex-minusOne) * PRIMARY_RECORD_LENGTH;
     fseek(overflowFile, offset, SEEK_SET);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
         unsigned int currentKey = page.cell[i].key;
@@ -342,8 +346,8 @@ int writePageToOverflowArea(Page page, unsigned int currentOverflowIndex) {
 
 int readPageFromOverflowArea(Page* page, unsigned int index) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "rb"); 
-    long pageSize = (long)PRIMARY_RECORD_LENGTH;
-    long offset = (long)index * pageSize;
+    long pageSize = (long)PRIMARY_PAGE_LENGTH;
+    long offset = (long)((index-1) * PRIMARY_RECORD_LENGTH);
     fseek(overflowFile, offset, SEEK_SET);
     memset(page, 0, sizeof(Page));  
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
@@ -453,12 +457,12 @@ int insertCellToFile(Cell cell) {
                     
                     
                     while (currentPtr != 0) {
-                        readPageFromOverflowArea(&overflowPage, currentPtr - 1);
+                        readPageFromOverflowArea(&overflowPage, currentPtr);
                         currentOverflowCell = &overflowPage.cell[0];
                     
                         if (currentOverflowCell->key > cell.key) { 
                             cell.overflowPointer = currentPrimaryOverflowPointer;
-                            if (writeCellToOverflow(cell, currentPtr, &newOverflowIndex) == 0) {
+                            if (writeCellToOverflow(cell, currentPtr-1, &newOverflowIndex) == 0) {
                                 
                                 if (previousPtr == i) { 
                                     prevCell->overflowPointer = newOverflowIndex;
@@ -480,7 +484,7 @@ int insertCellToFile(Cell cell) {
 
                     if (writeCellToOverflow(cell, 0, &newOverflowIndex) == 0) {
                         currentOverflowCell->overflowPointer = newOverflowIndex;
-                        writePageToOverflowArea(overflowPage, previousPtr - 1); 
+                        writePageToOverflowArea(overflowPage, previousPtr); 
                         writePageToPrimary(readPage, indexOfPage);
                         return 0; 
                     } else {
@@ -693,7 +697,7 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
         return emptyCell;
     }
     Page readOverflowPage;
-    readPageFromOverflowArea(&readOverflowPage, currentOverflowIndex - 1);
+    readPageFromOverflowArea(&readOverflowPage, currentOverflowIndex);
     
     if (readOverflowPage.cell[0].overflowPointer != 0) {
         Cell cellToReturn = takeBiggestRecordAndShrink(&readOverflowPage.cell[0].overflowPointer);
@@ -745,24 +749,24 @@ void reorganiseFile(){
     createFiles();
     unsigned int primaryPageIndex = 0;
     unsigned int indexPageIndex = 0;
-    unsigned int numberOfPagesToReorganise = countNumberOfPages()+1;
+    unsigned int numberOfPagesToReorganise = countNumberOfPages();
     int isTakenFromOVerflow = 0;
     int newPageSubIndex = 0;
+    Page primaryPage;
+    Page newPrimaryPage;
+    fillPageWithEmptyData(&newPrimaryPage);
     while(primaryPageIndex < numberOfPagesToReorganise) {
         isTakenFromOVerflow = 0;
-        Page primaryPage;
-        Page newPrimaryPage;
-        fillPageWithEmptyData(&newPrimaryPage);
         getPrimaryPage(&primaryPage, primaryPageIndex);
         for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             isTakenFromOVerflow = 0;
-            if (primaryPage.cell[i].overflowPointer == 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
+            if (primaryPage.cell[i].overflowPointer == 0 && primaryPage.cell[i].key != 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
                 newPrimaryPage.cell[newPageSubIndex] = primaryPage.cell[i];
                 primaryPage.cell[i].overflowPointer = 0;
                 primaryPage.cell[i].key = 0;
                 memset(primaryPage.cell[i].record.data, 0, MAX_RECORD_LENGTH);
                 newPageSubIndex++;
-            } else {
+            } else if (primaryPage.cell[i].overflowPointer != 0 && primaryPage.cell[i].key != 0) {
                 newPrimaryPage.cell[newPageSubIndex] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
                 isTakenFromOVerflow = 1;
                 newPageSubIndex++;
@@ -781,7 +785,6 @@ void reorganiseFile(){
                 i--;
             }
         }
-        writePageToPrimary(primaryPage, primaryPageIndex);
         primaryPageIndex++;
     }
     allocateNewOverflowArea(primaryPageIndex);
