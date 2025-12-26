@@ -65,6 +65,23 @@ int compare(const void* a, const void* b) {
     }
 }
 
+void fillPageWithEmptyData(Page* page) {
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        page->cell[i].key = 0;
+        page->cell[i].overflowPointer = 0;
+        memset(page->cell[i].record.data, 0, MAX_RECORD_LENGTH);
+    }
+    return;
+}
+
+void fillIndexPageWithEmptyData(IndexPage* page) {
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        page->indexEntry[i].key = 0;
+        page->indexEntry[i].pageNumber = 0;
+    }
+    return;
+}
+
 int generateKey() {
     //because RAND_MAX = 0x7FFF
     unsigned int firstPart = (unsigned int)rand();
@@ -200,8 +217,8 @@ int createNewPage(Cell cell) {
 }
 
 int getIndexPage(IndexPage* page, unsigned int index) {
-    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
-    long pageSize = (long)BLOCKING_FACTOR_PAGE * INDEX_FILE_POSITION_LENGHT;
+    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r+b");
+    long pageSize = (long)(BLOCKING_FACTOR_PAGE * (INDEX_FILE_POSITION_LENGHT));
     long offset = (long)index * pageSize;
     fseek(indexFile, offset, SEEK_SET);
     memset(page, 0, sizeof(IndexPage));
@@ -245,25 +262,31 @@ int getNewIndexPage(IndexPage* page, unsigned int index) {
     fclose(indexFile);
 }
 
-unsigned int getIndexOfPageToInsert(unsigned int key) {
+unsigned int getIndexOfPageToInsert(unsigned int key)
+{
     IndexPage page;
+    unsigned int lastValidPage = 0;
+    int found = 0;
+
     for (int i = 0; i < numberOfPages; i++) {
+        fillIndexPageWithEmptyData(&page);
         getIndexPage(&page, i);
 
         for (int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
-            if (page.indexEntry[j].key == 0)
-                return page.indexEntry[j - 1].pageNumber;
+            if (page.indexEntry[j].key == 0) {
+                if (found)
+                    return lastValidPage;
+                else
+                    break;
+            }
             if (key <= page.indexEntry[j].key) {
-                if (j + 1 < BLOCKING_FACTOR_PAGE &&
-                    page.indexEntry[j + 1].key != 0 &&
-                    key <= page.indexEntry[j + 1].key) {
-                    continue;
-                }
-                return page.indexEntry[j].pageNumber;
+                lastValidPage = page.indexEntry[j].pageNumber;
+                found = 1;
             }
         }
     }
-    return page.indexEntry[BLOCKING_FACTOR_PAGE - 1].pageNumber;
+
+    return lastValidPage;
 }
 
 
@@ -636,32 +659,6 @@ void changeFilenames() {
     return;
 }
 
-
-void fillPageWithEmptyData(Page* page) {
-    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
-        page->cell[i].key = 0;
-        page->cell[i].overflowPointer = 0;
-        memset(page->cell[i].record.data, 0, MAX_RECORD_LENGTH);
-    }
-    return;
-}
-
-void writeIndexEntryToIndexFile(IndexEntry indexEntry) {
-    IndexPage indexPage;
-    int inserted = 0;
-    unsigned int index;
-    while(!inserted) {
-        getIndexPage(&indexPage, index);
-        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
-            if(indexPage.indexEntry->key == 0) {
-                indexPage.indexEntry->key = indexEntry.key;
-                indexPage.indexEntry->pageNumber = indexEntry.pageNumber;
-            }
-        }
-        index++;
-    }
-}
-
 void initIndexPageWithEmptyData(IndexPage* IndexEntry) {
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         IndexEntry->indexEntry->key = 0;
@@ -671,24 +668,6 @@ void initIndexPageWithEmptyData(IndexPage* IndexEntry) {
     return;
 }
 
-void writeIndexEntryToNewIndexFile(IndexEntry indexEntry) {
-    IndexPage indexPage;
-    int inserted = 0;
-    unsigned int index;
-    while(!inserted) {
-        if(getNewIndexPage(&indexPage, index)){
-            initIndexPageWithEmptyData(&indexPage);
-        }
-        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
-            if(indexPage.indexEntry->key == 0) {
-                indexPage.indexEntry->key = indexEntry.key;
-                indexPage.indexEntry->pageNumber = indexEntry.pageNumber;
-                inserted = 1;
-            }
-        }
-        index++;
-    }
-}
 
 Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     unsigned int currentOverflowIndex = *previousPointer;
