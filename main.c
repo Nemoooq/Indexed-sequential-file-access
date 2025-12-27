@@ -614,6 +614,11 @@ void clearFiles() {
     fclose(indexFile);
     fclose(primaryFile);
     fclose(overflowFile);
+    numberOfPages =  0; //it is rather index than number (number = index+1)
+    numberOfRecords = 0;
+    mainOverflowCounter = 1;
+    readPageOperations = 0;
+    writePageOperatuons = 0;
     printf("All files cleared\n");
 }
 
@@ -687,7 +692,7 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     }
     Page readOverflowPage;
     readPageFromOverflowArea(&readOverflowPage, currentOverflowIndex);
-    
+    readPageOperations++;
     if (readOverflowPage.cell[0].overflowPointer != 0) {
         Cell cellToReturn = takeBiggestRecordAndShrink(&readOverflowPage.cell[0].overflowPointer);
         writePageToOverflowArea(readOverflowPage, currentOverflowIndex); 
@@ -749,6 +754,7 @@ void reorganiseFile(){
     while(primaryPageIndex < numberOfPagesToReorganise) {
         isTakenFromOVerflow = 0;
         getPrimaryPage(&primaryPage, primaryPageIndex);
+        readPageOperations++;
         for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             isTakenFromOVerflow = 0;
             if (primaryPage.cell[i].overflowPointer == 0 && primaryPage.cell[i].key != 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
