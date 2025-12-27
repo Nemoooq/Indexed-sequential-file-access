@@ -24,13 +24,15 @@
 #define INDEX_FILE_POSITION_LENGHT MAX_INT_LEN+MAX_INT_LEN+1+1 //maxIntLen + maxIntLen + ";" + "\n"
 #define OVERFLOW_AREA_RATIO 0.2 
 #define PRIMARY_RECORD_LENGTH 53 //10+10+30+3
-#define MAX_OVERFLOW_SIZE_WITHOUT_REORGANIZATION 3
 #define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
 unsigned int numberOfPages =  0; //it is rather index than number (number = index+1)
 unsigned int numberOfRecords = 0;
 unsigned int mainOverflowCounter = 1;
+unsigned int readPageOperations = 0;
+unsigned int writePageOperatuons = 0;
+
 
 typedef struct Record {
     char data[MAX_RECORD_LENGTH];
@@ -209,9 +211,11 @@ int createNewPage(Cell cell) {
     newIndexPage.indexEntry[0].key = cell.key;
     newIndexPage.indexEntry[0].pageNumber = numberOfPages;
     if (addPageToIndexFile(newIndexPage) != 0) {
+        writePageOperatuons++;
         return 1;
     }
     if (addPageToPrimaryFile(newPage) != 0) { 
+        writePageOperatuons++;
         return 1;
     }
     allocateOverflowArea(numberOfPages+1);
@@ -273,7 +277,7 @@ unsigned int getIndexOfPageToInsert(unsigned int key)
     for (int i = 0; i < numberOfPages; i++) {
         fillIndexPageWithEmptyData(&page);
         getIndexPage(&page, i);
-
+        readPageOperations++;
         for (int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
             if (page.indexEntry[j].key == 0) {
                 if (found)
@@ -433,6 +437,7 @@ int writeCellToOverflow(Cell cell, unsigned int overflowIndexInstert, unsigned i
     *primaryPageRecordOverflowIndex = index + indexOfRecordInPage;
     if(isInserted) {
         writePageToOverflowArea(readPage, overflowIndexInstert);
+        writePageOperatuons++;
     }
     fclose(overflowFile);
     return 0;
@@ -443,7 +448,8 @@ int insertCellToFile(Cell cell) {
     unsigned int indexOfPage = getIndexOfPageToInsert(cell.key);
     unsigned int newOverflowIndex; 
     int insertedInPrimary = 0; 
-    getPrimaryPage(&readPage, indexOfPage); 
+    getPrimaryPage(&readPage, indexOfPage);
+    readPageOperations++; 
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         if (readPage.cell[i].key == 0){
             readPage.cell[i].key = cell.key;
@@ -468,6 +474,7 @@ int insertCellToFile(Cell cell) {
                 if (writeCellToOverflow(cell, overflowIndexForRecordInPrimaryFile, &newOverflowIndex) == 0) {
                     readPage.cell[i].overflowPointer = newOverflowIndex; 
                     writePageToPrimary(readPage, indexOfPage);
+                    writePageOperatuons++;
                     mainOverflowCounter++;
                     return 0; 
                 } else {
@@ -483,18 +490,19 @@ int insertCellToFile(Cell cell) {
                     
                     while (currentPtr != 0) {
                         readPageFromOverflowArea(&overflowPage, currentPtr);
+                        readPageOperations++;
                         currentOverflowCell = &overflowPage.cell[0];
                     
                         if (currentOverflowCell->key > cell.key) { 
                             cell.overflowPointer = currentPrimaryOverflowPointer;
                             if (writeCellToOverflow(cell, currentPtr-1, &newOverflowIndex) == 0) {
-                                
                                 if (previousPtr == i) { 
                                     prevCell->overflowPointer = newOverflowIndex;
                                 } else { 
                 
                                 }
                                 writePageToPrimary(readPage, indexOfPage);
+                                writePageOperatuons++;
                                 mainOverflowCounter++;
                                 return 0; 
                             } else {
@@ -511,6 +519,8 @@ int insertCellToFile(Cell cell) {
                         currentOverflowCell->overflowPointer = newOverflowIndex;
                         writePageToOverflowArea(overflowPage, previousPtr); 
                         writePageToPrimary(readPage, indexOfPage);
+                        writePageOperatuons++;
+                        writePageOperatuons++;
                         return 0; 
                     } else {
                         printf("Error: Overflow Area is full.\n");
@@ -522,6 +532,7 @@ int insertCellToFile(Cell cell) {
 
     if (insertedInPrimary) {
         writePageToPrimary(readPage, indexOfPage);
+        writePageOperatuons++;
     }
     return 0; 
 }
@@ -680,6 +691,7 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     if (readOverflowPage.cell[0].overflowPointer != 0) {
         Cell cellToReturn = takeBiggestRecordAndShrink(&readOverflowPage.cell[0].overflowPointer);
         writePageToOverflowArea(readOverflowPage, currentOverflowIndex); 
+        writePageOperatuons++;
         return cellToReturn;
     } else {
         Cell cellToReturn = readOverflowPage.cell[0];
@@ -690,6 +702,7 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
         *previousPointer = 0; 
 
         writePageToOverflowArea(readOverflowPage, currentOverflowIndex);
+        writePageOperatuons++;
         return cellToReturn;
     }
 }
@@ -754,6 +767,7 @@ void reorganiseFile(){
                 newIndexEntry.key = newPrimaryPage.cell[0].key;
                 newIndexEntry.pageNumber = indexPageIndex;
                 writeIndexPageToIndexFile(newIndexEntry, indexPageIndex);
+                writePageOperatuons++;
                 writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
                 indexPageIndex++;
                 newPageSubIndex = 0;
@@ -772,6 +786,7 @@ void reorganiseFile(){
             newIndexEntry.pageNumber = indexPageIndex;
             writeIndexPageToIndexFile(newIndexEntry, indexPageIndex);
             writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
+            writePageOperatuons++;
             indexPageIndex++;
             newPageSubIndex = 0;
             fillPageWithEmptyData(&newPrimaryPage);
@@ -800,6 +815,8 @@ int processCommand(char* inputBuffor) {
     char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
     char firstArgument[MAX_RECORD_LENGTH] = {0};
     char secondArgument[MAX_RECORD_LENGTH] = {0};
+    readPageOperations = 0;
+    writePageOperatuons = 0;
     sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
     if(strcmp(mnemonic, "DISP") == 0) {
         printf("chuja\n"); 
@@ -823,7 +840,8 @@ int processCommand(char* inputBuffor) {
         printf("Unknown mnemonic\n");
         return 1;
     }
-    
+    printf("Read page operations: %u\n", readPageOperations);
+    printf("Write page operations: %u\n", writePageOperatuons);
     return 0;
 }
 
