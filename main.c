@@ -750,7 +750,7 @@ void reorganiseFile(){
                     && primaryPage.cell[i].overflowPointer == 0
                     && primaryPage.cell[i].key != 0) {
                 primaryPage.cell[i].key = 0;
-            } else if (primaryPage.cell[i].record.data[0] == (unsigned int)' '  
+            } else if (!(primaryPage.cell[i].record.data[0] == (unsigned int)' ')  
                     && primaryPage.cell[i].overflowPointer != 0 
                     && primaryPage.cell[i].key != 0) {
                 newPrimaryPage.cell[i] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
