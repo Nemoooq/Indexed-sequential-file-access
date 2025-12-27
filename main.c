@@ -746,7 +746,15 @@ void reorganiseFile(){
         readPageOperations++;
         for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             isTakenFromOVerflow = 0;
-
+            if(primaryPage.cell[i].record.data[0] == (unsigned int)' ' 
+                    && primaryPage.cell[i].overflowPointer == 0
+                    && primaryPage.cell[i].key != 0) {
+                primaryPage.cell[i].key = 0;
+            } else if (primaryPage.cell[i].record.data[0] == (unsigned int)' '  
+                    && primaryPage.cell[i].overflowPointer != 0 
+                    && primaryPage.cell[i].key != 0) {
+                newPrimaryPage.cell[i] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
+            }
             if (primaryPage.cell[i].overflowPointer == 0 && primaryPage.cell[i].key != 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
                 newPrimaryPage.cell[newPageSubIndex] = primaryPage.cell[i];
                 primaryPage.cell[i].overflowPointer = 0;
