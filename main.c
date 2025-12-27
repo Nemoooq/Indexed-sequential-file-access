@@ -807,6 +807,55 @@ void reorganiseFile(){
     return;
 }
 
+void commandDispProcess() {
+    Page readPage;
+    printf("Primary Area:\n");
+    for(unsigned int i = 0; i < numberOfPages; i++) {
+        getPrimaryPage(&readPage, i);
+        readPageOperations++;
+        printf("Page %u:\n", i);
+        printf("Key       | Value                         | Overflow Pointer\n");
+        printf("---------------------------------------------------------\n");
+        for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
+            if (readPage.cell[j].key != 0) {
+                printf("%010u | %-30.30s | %010u\n", readPage.cell[j].key, readPage.cell[j].record.data, readPage.cell[j].overflowPointer);
+            } else {
+                printf("---------- | ------------------------------ | ----------\n");
+            }
+        }
+        printf("\n");
+    }
+    printf("Overflow Area:\n");
+    unsigned int overflowPageIndex = 1;
+    while (1) {
+        getPrimaryPage(&readPage, overflowPageIndex);
+        readPageOperations++;
+        int isEmptyPage = 1;
+        for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
+            if (readPage.cell[j].key != 0) {
+                isEmptyPage = 0;
+                break;
+            }
+        }
+        if (isEmptyPage) {
+            break;
+        }
+        printf("Overflow Page %u:\n", overflowPageIndex);
+        printf("Key       | Value                         | Overflow Pointer\n");
+        printf("---------------------------------------------------------\n");
+        for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
+            if (readPage.cell[j].key != 0) {
+                printf("%010u | %-30.30s | %010u\n", readPage.cell[j].key, readPage.cell[j].record.data, readPage.cell[j].overflowPointer);
+            } else {
+                printf("---------- | ------------------------------ | ----------\n");
+            }
+        }
+        printf("\n");
+        overflowPageIndex++;
+    }
+
+}
+
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
     numberOfPages = countNumberOfPages();
@@ -825,7 +874,7 @@ int processCommand(char* inputBuffor) {
     writePageOperatuons = 0;
     sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
     if(strcmp(mnemonic, "DISP") == 0) {
-        printf("chuja\n"); 
+        commandDispProcess();
     } else if (strcmp(mnemonic, "ADDG") == 0) {
         CommandADDGProcess();
     } else if (strcmp(mnemonic, "ADD") == 0) {
