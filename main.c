@@ -29,6 +29,7 @@
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
 unsigned int numberOfPages =  0; //it is rather index than number (number = index+1)
+unsigned int numberOfRecords = 0;
 unsigned int mainOverflowCounter = 1;
 
 typedef struct Record {
@@ -136,6 +137,8 @@ void printHelp() {
     printf("- DISPI [PAGE_INDEX]- display specific page index\n");
     printf("- DEL [INDEX] - deletes specified index\n");
     printf("- MOD [INDEX] [NEW_VALUE] - changes value of record on specified index\n");
+    printf("- CLR - clears all files\n");
+    printf("- REORG - reorganizes the file\n");
     return;
 }
 
@@ -567,6 +570,7 @@ unsigned int countNumberOfPages() {
     IndexPage page;
     unsigned int maxPageNumber = 0;
     unsigned int pageIndex = 0;
+    numberOfRecords = 0;
     if (chackIsFileEmpty()) {
         return 0;
     }
@@ -626,43 +630,6 @@ int commandADDProcess(char* firstArgument) {
     }
 }
 
-int processCommand(char* inputBuffor) {
-    numberOfPages = 0;
-    numberOfPages = countNumberOfPages();
-    if(!chackIsFileEmpty()) {
-        numberOfPages = countNumberOfPages();
-    } else {
-        allocateOverflowArea(max(BLOCKING_FACTOR_PAGE,numberOfPages));
-    }
-    printf("Number of pages: %u\n", numberOfPages); 
-    char debugRecord[MAX_RECORD_LENGTH] = {0};
-    char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
-    char firstArgument[MAX_RECORD_LENGTH] = {0};
-    char secondArgument[MAX_RECORD_LENGTH] = {0};
-    sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
-    if(strcmp(mnemonic, "DISP") == 0) {
-        printf("chuja\n"); 
-    } else if (strcmp(mnemonic, "ADDG") == 0) {
-        CommandADDGProcess();
-    } else if (strcmp(mnemonic, "ADD") == 0) {
-        commandADDProcess(firstArgument);
-    } else if (strcmp(mnemonic, "READR") == 0) {
-        printf("%s\n", firstArgument);
-    } else if (strcmp(mnemonic, "DISPI") == 0) {
-        printf("%s\n", firstArgument);
-    } else if (strcmp(mnemonic, "DEL") == 0) {
-        printf("%s\n", firstArgument);
-    } else if (strcmp(mnemonic, "MOD") == 0) {
-        printf("%s, %s\n", firstArgument, secondArgument); 
-    } else if (strcmp(mnemonic, "CLR") == 0) {
-        clearFiles();
-    } else {
-        printf("Unknown mnemonic\n");
-        return 1;
-    }
-    
-    return 0;
-}
 
 void clearInputBufor(char* inputBufor) {
     for(int i = 0; i < MAX_COMMAND_LENGTH; i++) {
@@ -798,12 +765,68 @@ void reorganiseFile(){
         }
         primaryPageIndex++;
     }
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        if(newPrimaryPage.cell->key!=0) {
+            IndexEntry newIndexEntry;
+            newIndexEntry.key = newPrimaryPage.cell[0].key;
+            newIndexEntry.pageNumber = indexPageIndex;
+            writeIndexPageToIndexFile(newIndexEntry, indexPageIndex);
+            writePageToNewPrimary(newPrimaryPage, indexPageIndex); //trzeba znieminc na taka z inna nazwa pliku
+            indexPageIndex++;
+            newPageSubIndex = 0;
+            fillPageWithEmptyData(&newPrimaryPage);
+            primaryPageIndex++;
+            break;
+        }
+    }
     allocateNewOverflowArea(primaryPageIndex);
 
     changeFilenames();
     mainOverflowCounter = 0;
     return;
 }
+
+int processCommand(char* inputBuffor) {
+    numberOfPages = 0;
+    numberOfPages = countNumberOfPages();
+    if(!chackIsFileEmpty()) {
+        numberOfPages = countNumberOfPages();
+    } else {
+        allocateOverflowArea(max(BLOCKING_FACTOR_PAGE,numberOfPages));
+    }
+    printf("Number of pages: %u\n", numberOfPages);
+    //printf("Number of records = %u\n", numberOfRecords); 
+    char debugRecord[MAX_RECORD_LENGTH] = {0};
+    char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
+    char firstArgument[MAX_RECORD_LENGTH] = {0};
+    char secondArgument[MAX_RECORD_LENGTH] = {0};
+    sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
+    if(strcmp(mnemonic, "DISP") == 0) {
+        printf("chuja\n"); 
+    } else if (strcmp(mnemonic, "ADDG") == 0) {
+        CommandADDGProcess();
+    } else if (strcmp(mnemonic, "ADD") == 0) {
+        commandADDProcess(firstArgument);
+    } else if (strcmp(mnemonic, "READR") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "DISPI") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "DEL") == 0) {
+        printf("%s\n", firstArgument);
+    } else if (strcmp(mnemonic, "MOD") == 0) {
+        printf("%s, %s\n", firstArgument, secondArgument); 
+    } else if (strcmp(mnemonic, "CLR") == 0) {
+        clearFiles();
+    } else if (strcmp(mnemonic, "REORG") == 0) {
+        reorganiseFile();
+    } else {
+        printf("Unknown mnemonic\n");
+        return 1;
+    }
+    
+    return 0;
+}
+
 
 int commandLineLoop() {
     int exit = 0;
