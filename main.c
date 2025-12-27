@@ -153,7 +153,6 @@ int chackIsFileEmpty() {
     }
     
     return isFileEmpty;
-    return 0;
 }
 
 int addPageToIndexFile(IndexPage page) {
@@ -565,24 +564,34 @@ void CommandADDGProcess() {
 }
 
 unsigned int countNumberOfPages() {
-    unsigned int countedNumberOfPages = 0;
-    IndexPage readPage;
-    FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "r");
-    while(!feof(indexFile)){
-        getIndexPage(&readPage, countedNumberOfPages);
-        for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
-            if(readPage.indexEntry[i].key != 0) {
-                //printf("Key: %u\n", readPage.indexEntry[i].key);
-                countedNumberOfPages++;
-            } else {
-                fclose(indexFile);
-                return countedNumberOfPages;
+    IndexPage page;
+    unsigned int maxPageNumber = 0;
+    unsigned int pageIndex = 0;
+    if (chackIsFileEmpty()) {
+        return 0;
+    }
+    while (1) {
+        fillIndexPageWithEmptyData(&page);
+        getIndexPage(&page, pageIndex);
+        for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+
+            if (page.indexEntry[i].key == 0 &&
+                page.indexEntry[i].pageNumber == 0) {
+
+                return maxPageNumber + 1;
+            }
+
+            // SZUKAMY MAKSYMUM
+            if (page.indexEntry[i].pageNumber != 0) {
+                maxPageNumber = page.indexEntry[i].pageNumber;
             }
         }
+
+        pageIndex++;
     }
-    fclose(indexFile);
-    return countedNumberOfPages;
+    return maxPageNumber + 1;
 }
+
 
 void clearFiles() {
     FILE* indexFile = fopen(PAGES_INDEXES_FILENAME, "w");
