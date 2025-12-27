@@ -268,8 +268,7 @@ int getNewIndexPage(IndexPage* page, unsigned int index) {
     fclose(indexFile);
 }
 
-unsigned int getIndexOfPageToInsert(unsigned int key)
-{
+unsigned int getIndexOfPageToInsert(unsigned int key) {
     IndexPage page;
     unsigned int lastValidPage = 0;
     int found = 0;
@@ -674,16 +673,6 @@ void changeFilenames() {
     return;
 }
 
-void initIndexPageWithEmptyData(IndexPage* IndexEntry) {
-    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
-        IndexEntry->indexEntry->key = 0;
-        IndexEntry->indexEntry->pageNumber = 0;
-        IndexEntry->nextIndexPageId = 0;
-    }
-    return;
-}
-
-
 Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     unsigned int currentOverflowIndex = *previousPointer;
     if (currentOverflowIndex == 0) {
@@ -757,6 +746,7 @@ void reorganiseFile(){
         readPageOperations++;
         for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             isTakenFromOVerflow = 0;
+
             if (primaryPage.cell[i].overflowPointer == 0 && primaryPage.cell[i].key != 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
                 newPrimaryPage.cell[newPageSubIndex] = primaryPage.cell[i];
                 primaryPage.cell[i].overflowPointer = 0;
@@ -856,6 +846,35 @@ void commandDispProcess() {
 
 }
 
+void commandDELProcess(char* indexToDelete) {
+    if (indexToDelete == NULL) {
+        printf("Error - given index is null");
+        return;
+    }
+
+    size_t len = strlen(indexToDelete);
+    if (len == 0 || len > 10) {
+        printf("Error - len is 0 or greater than 10");
+        return;
+    }
+
+    unsigned int index = (unsigned int)atoi(indexToDelete);;
+
+    Page pageWithIndexToDelete;
+    fillPageWithEmptyData(&pageWithIndexToDelete);
+    unsigned int indexOfPage = getIndexOfPageToInsert(index);
+    getPrimaryPage(&pageWithIndexToDelete, indexOfPage);
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        if(pageWithIndexToDelete.cell[i].key == index) {
+            strncpy(pageWithIndexToDelete.cell[i].record.data,"",MAX_RECORD_LENGTH);
+            break;
+        }
+    }
+    writePageToPrimary(pageWithIndexToDelete, indexOfPage);
+    return;
+
+}
+
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
     numberOfPages = countNumberOfPages();
@@ -884,7 +903,7 @@ int processCommand(char* inputBuffor) {
     } else if (strcmp(mnemonic, "DISPI") == 0) {
         printf("%s\n", firstArgument);
     } else if (strcmp(mnemonic, "DEL") == 0) {
-        printf("%s\n", firstArgument);
+        commandDELProcess(firstArgument);
     } else if (strcmp(mnemonic, "MOD") == 0) {
         printf("%s, %s\n", firstArgument, secondArgument); 
     } else if (strcmp(mnemonic, "CLR") == 0) {
