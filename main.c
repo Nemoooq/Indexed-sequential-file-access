@@ -581,7 +581,6 @@ unsigned int countNumberOfPages() {
                 return maxPageNumber + 1;
             }
 
-            // SZUKAMY MAKSYMUM
             if (page.indexEntry[i].pageNumber != 0) {
                 maxPageNumber = page.indexEntry[i].pageNumber;
             }
@@ -603,6 +602,30 @@ void clearFiles() {
     printf("All files cleared\n");
 }
 
+int commandADDProcess(char* firstArgument) {
+    for(int i = 0; i < MAX_RECORD_LENGTH; i++) {
+        char character = firstArgument[i];
+        for(int j = 0; j < MAX_RECORD_LENGTH; j++) {
+            if(character == CHARACTER_SET[j]) {
+                break;
+            }
+            if(j == MAX_RECORD_LENGTH-1) {
+                printf("Error - invalid character in record value\n");
+                return 1;
+            }
+        }
+    }
+    Record newRecord;
+    strncpy(newRecord.data, firstArgument, MAX_RECORD_LENGTH);
+    if (!addRecord(newRecord)) {
+       // printf("Record added succesfully\n");
+        return 0;
+    } else {
+        //printf("Error - record not added\n");
+        return 1;
+    }
+}
+
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
     numberOfPages = countNumberOfPages();
@@ -622,7 +645,7 @@ int processCommand(char* inputBuffor) {
     } else if (strcmp(mnemonic, "ADDG") == 0) {
         CommandADDGProcess();
     } else if (strcmp(mnemonic, "ADD") == 0) {
-        printf("%s\n", firstArgument);
+        commandADDProcess(firstArgument);
     } else if (strcmp(mnemonic, "READR") == 0) {
         printf("%s\n", firstArgument);
     } else if (strcmp(mnemonic, "DISPI") == 0) {
