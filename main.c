@@ -384,23 +384,22 @@ int readPageFromOverflowArea(Page* page, unsigned int index) {
     }
     
     fclose(overflowFile);
-    return 0;
+    return 1;
 }
 
 int findRecordInOverflowArea(unsigned int overflowIndex, Cell searchCell, Cell* foundCell) {
     Page readPage;
-    int isFound = 0;
-    unsigned int index = overflowIndex;
-    while (!isFound && readPageFromOverflowArea(&readPage, index)) {
+    unsigned int index = 0;
+    while (readPageFromOverflowArea(&readPage, index)) {
         for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             if (readPage.cell[i].key == searchCell.key) {
-                isFound = 1;
-                break;
+                *foundCell = readPage.cell[i];
+                return 1;
             }
         }
         index++;
     }
-    return isFound;
+    return 0;
 }
 
 int writeCellToOverflow(Cell cell, unsigned int overflowIndexInstert, unsigned int* primaryPageRecordOverflowIndex) {
@@ -461,7 +460,8 @@ int insertCellToFile(Cell cell) {
         if (readPage.cell[i].key < cell.key)  {
             unsigned int currentPrimaryOverflowPointer = readPage.cell[i].overflowPointer;
             Cell* prevCell = &readPage.cell[i];
-            if (prevCell->overflowPointer != 0 && findRecordInOverflowArea(prevCell->overflowPointer, cell, NULL)) {
+            Cell foundCell;
+            if (prevCell->overflowPointer != 0 && findRecordInOverflowArea(prevCell->overflowPointer, cell, &foundCell)) {
                 printf("Record with that index exists in overflow area, aborting\n");
                 return 1;
             }
@@ -939,14 +939,30 @@ void commandREADIProcess(char* index) {
     unsigned int indexOfPage = getIndexOfPageToInsert(indexValue);
     getPrimaryPage(&readPage, indexOfPage);
     readPageOperations++;
+    if (indexValue < readPage.cell[BLOCKING_FACTOR_PAGE - 1].key) {
+        indexOfPage++;
+        getPrimaryPage(&readPage, indexOfPage);
+        readPageOperations++;
+    }
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         if (readPage.cell[i].key == indexValue) {
             printf("Record found:\nKey: %010u | Value: %-30.30s | Overflow Pointer: %010u\n", readPage.cell[i].key, readPage.cell[i].record.data, readPage.cell[i].overflowPointer);
             return;
+        } 
+        if (readPage.cell[i].overflowPointer != 0) {
+            Cell found;
+            Cell cellToFind;
+            cellToFind.key = indexValue;
+            if (findRecordInOverflowArea(readPage.cell[i].overflowPointer, cellToFind, &found)) {
+                printf("Record found in overflow area:\nKey: %010u | Value: %-30.30s | Overflow Pointer: %010u\n",
+                    found.key, found.record.data, found.overflowPointer);
+                return;
+            }
         }
     }
-    findRecordInOverflowArea(readPage.cell[0].overflowPointer, readPage.cell[0], &readPage.cell[0]);
-    printf("Record found in overflow area:\nKey: %010u | Value: %-30.30s | Overflow Pointer: %010u\n", readPage.cell[0].key, readPage.cell[0].record.data, readPage.cell[0].overflowPointer);
+
+    printf("Record with key %u not found\n", indexValue);
+
 
 }
 
