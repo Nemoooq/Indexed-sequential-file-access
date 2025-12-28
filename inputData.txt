@@ -1,23 +1,64 @@
+CLR
+ADD inicjalizacja
 ADDG
 ADDG
 ADDG
+ADD abcdefghijklmnopqrstuvwxyz
+DISP
+ADDI 100 punktkontrolnyalfa
+DISPI 1
+DEL 100
+REORG
 ADDG
 ADDG
 ADDG
+ADD kolejnaporcja
+ADD drugaporcja
+ADD trzeciaporcja
+MOD 1 zmienionynastart
+DISP
+DISPI 2
+DEL 1
+DEL 2
+REORG
 ADDG
 ADDG
 ADDG
 ADDG
 ADDG
 ADDG
+ADDI 500 dalekiwpis
+MOD 500 poprawkadalekiego
+DISPI 5
+REORG
+ADD testdlugoscirekordu
+ADD kolejnytest
+ADD jeszczeden
 ADDG
 ADDG
 ADDG
+DISP
+ADDI 10 wstawka
+MOD 10 nowawstawka
+DEL 10
+REORG
 ADDG
 ADDG
 ADDG
 ADDG
 ADDG
+DISPI 1
+DISPI 2
+DISPI 3
+ADD fazaicantat
+ADD fazabeta
+ADD fazagamma
+ADD fazadelta
+MOD 5 modyfikacjapiatego
+DEL 4
+DEL 6
+REORG
+DISP
 ADDG
 ADDG
 ADDG
@@ -28,11 +69,22 @@ ADDG
 ADDG
 ADDG
 ADDG
+ADDI 777 szczesliwyindeks
+DISPI 7
+MOD 777 pechowyindeks
+DEL 777
+REORG
+ADD rekordowemnozenie
 ADDG
 ADDG
 ADDG
 ADDG
 ADDG
+DISP
+ADDI 1 wstawienienapoczatek
+MOD 1 korektapoczatku
+DEL 1
+REORG
 ADDG
 ADDG
 ADDG
@@ -48,8 +100,14 @@ ADDG
 ADDG
 ADDG
 ADDG
+DISPI 10
+ADD ostatniafazatestu
+ADD przedostatniafazatestu
 ADDG
 ADDG
+MOD 20 dwudziestka
+DEL 20
+REORG
 ADDG
 ADDG
 ADDG
@@ -70,6 +128,13 @@ ADDG
 ADDG
 ADDG
 ADDG
+DISP
+ADDI 55 piatkapiatka
+MOD 55 zmianaobydwu
+DEL 55
+REORG
+ADD zakonczenie
+ADD finalizacja
 ADDG
 ADDG
 ADDG
@@ -100,6 +165,13 @@ ADDG
 ADDG
 ADDG
 ADDG
+DISP
+REORG
+DISP
+ADDI 99999999 dziewiecy
+MOD 99999999 zmianaunint
+DEL 99999999
+REORG
 ADDG
 ADDG
 ADDG
@@ -142,3 +214,44 @@ ADDG
 ADDG
 ADDG
 ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+ADDG
+DISP
+REORG
+DISP

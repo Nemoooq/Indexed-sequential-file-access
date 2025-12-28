@@ -133,7 +133,8 @@ void printHelp() {
     printf("- MOD [INDEX] [NEW_VALUE] - changes value of record on specified index\n");
     printf("- CLR - clears all files\n");
     printf("- REORG - reorganizes the file\n");
-    printf("- ADDI [INDEX] [RECORD_VALUE]\n");
+    printf("- ADDI [INDEX] [RECORD_VALUE] - adds record with specified both index and value\n");
+    printf("- READI [INDEX] - search for an record specified by index\n");
     return;
 }
 
@@ -927,6 +928,28 @@ void commandADDIProcess(char* index, char* recordValue) {
     return;
 }
 
+void commandREADIProcess(char* index) {
+    Page readPage;
+    size_t lenIndex = strlen(index);
+    if (lenIndex == 0 || lenIndex > 10) {
+        printf("Error - index length is invalid");
+        return;
+    }
+    unsigned int indexValue = (unsigned int)atoi(index);
+    unsigned int indexOfPage = getIndexOfPageToInsert(indexValue);
+    getPrimaryPage(&readPage, indexOfPage);
+    readPageOperations++;
+    for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
+        if (readPage.cell[i].key == indexValue) {
+            printf("Record found:\nKey: %010u | Value: %-30.30s | Overflow Pointer: %010u\n", readPage.cell[i].key, readPage.cell[i].record.data, readPage.cell[i].overflowPointer);
+            return;
+        }
+    }
+    findRecordInOverflowArea(readPage.cell[0].overflowPointer, readPage.cell[0], &readPage.cell[0]);
+    printf("Record found in overflow area:\nKey: %010u | Value: %-30.30s | Overflow Pointer: %010u\n", readPage.cell[0].key, readPage.cell[0].record.data, readPage.cell[0].overflowPointer);
+
+}
+
 void commandMODProcess(char* oldIndex, char* newIndex, char* newRecord) {
     size_t lenOldIndex = strlen(oldIndex);
     size_t lenNewIndex = strlen(newIndex);
@@ -996,6 +1019,8 @@ int processCommand(char* inputBuffor) {
         reorganiseFile();
     } else if (strcmp(mnemonic, "ADDI") == 0) {
         commandADDIProcess(firstArgument, secondArgument);
+    } else if (strcmp(mnemonic, "READI") == 0) {
+        commandREADIProcess(firstArgument);
     } else {
         printf("Unknown mnemonic\n");
         return 1;
@@ -1035,7 +1060,6 @@ int commandLineLoop() {
 }
 
 int fileProcess() {
-
     char inputBufor[MAX_COMMAND_LENGTH] = {0};
 
     FILE* file = fopen(TEST_DATA_FILENAME, "r");
@@ -1051,7 +1075,6 @@ int fileProcess() {
         if (strlen(inputBufor) == 0) {
             continue;
         }
-
 
         processCommand(inputBufor);
         
