@@ -139,13 +139,13 @@ void printHelp() {
     printf("Possible commands:\n");
     printf("- ADD [RECORD_VALUE] - adds specified record to the file\n");
     printf("- ADDG - adds auto generated record to the file\n");
-    printf("- READR [RECORD_INDEX] - reads record from specified index\n");
     printf("- DISP - display whole file\n");
     printf("- DISPI [PAGE_INDEX]- display specific page index\n");
     printf("- DEL [INDEX] - deletes specified index\n");
     printf("- MOD [INDEX] [NEW_VALUE] - changes value of record on specified index\n");
     printf("- CLR - clears all files\n");
     printf("- REORG - reorganizes the file\n");
+    printf("- ADDI [INDEX] [RECORD_VALUE]\n");
     return;
 }
 
@@ -876,7 +876,6 @@ void commandDispProcess() {
         printf("\n");
         overflowPageIndex++;
     }
-
 }
 
 void commandDELProcess(char* indexToDelete) {
@@ -908,6 +907,43 @@ void commandDELProcess(char* indexToDelete) {
 
 }
 
+void commandADDIProcess(char* index, char* recordValue) {
+    size_t lenIndex = strlen(index);
+    size_t lenRecordValue = strlen(recordValue);
+    if (lenIndex == 0 || lenIndex > 10 ||
+        lenRecordValue == 0 || lenRecordValue > MAX_RECORD_LENGTH) {
+        printf("Error - one of the arguments has invalid length");
+        return;
+    }
+    Record newRecord;
+    Cell newCell;
+    newCell.key = (unsigned int)atoi(index);
+    strncpy(newRecord.data, recordValue, MAX_RECORD_LENGTH);
+    newCell.record = newRecord;
+    newCell.overflowPointer = 0;
+    insertCell(newCell);
+    return;
+}
+
+void commandMODProcess(char* oldIndex, char* newIndex, char* newRecord) {
+    size_t lenOldIndex = strlen(oldIndex);
+    size_t lenNewIndex = strlen(newIndex);
+    size_t lenNewRecord = strlen(newRecord);
+    if (lenOldIndex == 0 || lenOldIndex > 10 ||
+        lenNewIndex == 0 || lenNewIndex > 10 ||
+        lenNewRecord == 0 || lenNewRecord > MAX_RECORD_LENGTH) {
+        printf("Error - one of the arguments has invalid length");
+        return;
+    }
+    unsigned int oldIndexValue = (unsigned int)atoi(oldIndex);
+    unsigned int newIndexValue = (unsigned int)atoi(newIndex);
+    commandDELProcess(oldIndex);
+    reorganiseFile();
+    commandADDIProcess(newIndex, newRecord);
+    
+    return;
+}
+
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
     numberOfPages = countNumberOfPages();
@@ -922,27 +958,28 @@ int processCommand(char* inputBuffor) {
     char mnemonic[MAX_MNEMONIC_LENGTH] = {0};
     char firstArgument[MAX_RECORD_LENGTH] = {0};
     char secondArgument[MAX_RECORD_LENGTH] = {0};
+    char thirdArgument[MAX_RECORD_LENGTH] = {0};
     readPageOperations = 0;
     writePageOperatuons = 0;
-    sscanf(inputBuffor,"%s %s %s",mnemonic,firstArgument,secondArgument);
+    sscanf(inputBuffor,"%s %s %s %s",mnemonic,firstArgument,secondArgument,thirdArgument);
     if(strcmp(mnemonic, "DISP") == 0) {
         commandDispProcess();
     } else if (strcmp(mnemonic, "ADDG") == 0) {
         CommandADDGProcess();
     } else if (strcmp(mnemonic, "ADD") == 0) {
         commandADDProcess(firstArgument);
-    } else if (strcmp(mnemonic, "READR") == 0) {
-        printf("%s\n", firstArgument);
     } else if (strcmp(mnemonic, "DISPI") == 0) {
         printf("%s\n", firstArgument);
     } else if (strcmp(mnemonic, "DEL") == 0) {
         commandDELProcess(firstArgument);
     } else if (strcmp(mnemonic, "MOD") == 0) {
-        printf("%s, %s\n", firstArgument, secondArgument); 
+        commandMODProcess(firstArgument, secondArgument, thirdArgument);
     } else if (strcmp(mnemonic, "CLR") == 0) {
         clearFiles();
     } else if (strcmp(mnemonic, "REORG") == 0) {
         reorganiseFile();
+    } else if (strcmp(mnemonic, "ADDI") == 0) {
+        commandADDIProcess(firstArgument, secondArgument);
     } else {
         printf("Unknown mnemonic\n");
         return 1;
