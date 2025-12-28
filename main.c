@@ -854,8 +854,10 @@ void commandDispProcess() {
     }
     printf("Overflow Area:\n");
     unsigned int overflowPageIndex = 1;
+    fillPageWithEmptyData(&readPage);
+    int indexOfOverflowPage = 1;
     while (1) {
-        getPrimaryPage(&readPage, overflowPageIndex);
+        readPageFromOverflowArea(&readPage, overflowPageIndex);
         readPageOperations++;
         int isEmptyPage = 1;
         for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
@@ -867,7 +869,7 @@ void commandDispProcess() {
         if (isEmptyPage) {
             break;
         }
-        printf("Overflow Page %u:\n", overflowPageIndex);
+        printf("Overflow Page %u:\n", indexOfOverflowPage);
         printf("Key       | Value                         | Overflow Pointer\n");
         printf("---------------------------------------------------------\n");
         for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
@@ -878,7 +880,8 @@ void commandDispProcess() {
             }
         }
         printf("\n");
-        overflowPageIndex++;
+        overflowPageIndex+=BLOCKING_FACTOR_PAGE;
+        indexOfOverflowPage++;
     }
 }
 
