@@ -59,16 +59,6 @@ typedef struct IndexPage {
     unsigned int nextIndexPageId;
 } IndexPage;
 
-int compare(const void* a, const void* b) {
-    Cell* cellA = (Cell*)a;
-    Cell* cellB = (Cell*)b;
-    if (cellA->key < cellB->key) {
-        return 0;
-    } else {
-        return 1;
-    }
-}
-
 void fillPageWithEmptyData(Page* page) {
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         page->cell[i].key = 0;
@@ -725,6 +715,18 @@ Cell takeBiggestRecordAndShrink(unsigned int *previousPointer) {
     }
 }
 
+Cell takeSmallesRecord(unsigned int *previousPointer) {
+    unsigned int currentOverflowIndex = *previousPointer;
+    if (currentOverflowIndex == 0) {
+        Cell emptyCell = {0};
+        return emptyCell;
+    }
+    Page readOverflowPage;
+    readPageFromOverflowArea(&readOverflowPage, currentOverflowIndex);
+    readPageOperations++;
+    return readOverflowPage.cell[0];
+}
+
 void writeIndexPageToIndexFile(IndexEntry IndexEntry, unsigned int indexPageIndex) {
     IndexPage indexPage;
     getNewIndexPage(&indexPage, indexPageIndex);
@@ -777,8 +779,9 @@ void reorganiseFile(){
             } else if (primaryPage.cell[i].record.data[0] == (unsigned int)' '  
                     && primaryPage.cell[i].overflowPointer != 0 
                     && primaryPage.cell[i].key != 0) {
-                    printf("chujachyujahcujahuajchaujc");
-                primaryPage.cell[i] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
+                //unsigned int tmpOverflowPointer = primaryPage.cell[i].overflowPointer;
+                primaryPage.cell[i] = takeSmallesRecord(&primaryPage.cell[i].overflowPointer);
+               // primaryPage.cell[i].overflowPointer = tmpOverflowPointer;
             }
             if (primaryPage.cell[i].overflowPointer == 0 && primaryPage.cell[i].key != 0) { //sprawdzamy czy overflow jakis jest dla tego indeksu
                 newPrimaryPage.cell[newPageSubIndex] = primaryPage.cell[i];
@@ -787,7 +790,9 @@ void reorganiseFile(){
                 memset(primaryPage.cell[i].record.data, 0, MAX_RECORD_LENGTH);
                 newPageSubIndex++;
             } else if (primaryPage.cell[i].overflowPointer != 0 && primaryPage.cell[i].key != 0) {
+                //unsigned int tmpOverflowPointer = primaryPage.cell[i].overflowPointer;
                 newPrimaryPage.cell[newPageSubIndex] = takeBiggestRecordAndShrink(&primaryPage.cell[i].overflowPointer);
+                //primaryPage.cell[i].overflowPointer = tmpOverflowPointer;
                 isTakenFromOVerflow = 1;
                 newPageSubIndex++;
             }
@@ -879,11 +884,6 @@ void commandDispProcess() {
 }
 
 void commandDELProcess(char* indexToDelete) {
-    if (indexToDelete == NULL) {
-        printf("Error - given index is null");
-        return;
-    }
-
     size_t len = strlen(indexToDelete);
     if (len == 0 || len > 10) {
         printf("Error - len is 0 or greater than 10");
@@ -891,14 +891,18 @@ void commandDELProcess(char* indexToDelete) {
     }
 
     unsigned int index = (unsigned int)atoi(indexToDelete);;
-
+    
     Page pageWithIndexToDelete;
     fillPageWithEmptyData(&pageWithIndexToDelete);
     unsigned int indexOfPage = getIndexOfPageToInsert(index);
     getPrimaryPage(&pageWithIndexToDelete, indexOfPage);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         if(pageWithIndexToDelete.cell[i].key == index) {
-            strncpy(pageWithIndexToDelete.cell[i].record.data,"",MAX_RECORD_LENGTH);
+            if (pageWithIndexToDelete.cell[i].overflowPointer != 0) {
+                pageWithIndexToDelete.cell[i] = takeSmallesRecord(&pageWithIndexToDelete.cell[i].overflowPointer);
+            } else {
+                strncpy(pageWithIndexToDelete.cell[i].record.data,"",MAX_RECORD_LENGTH);
+            }
             break;
         }
     }
@@ -944,6 +948,20 @@ void commandMODProcess(char* oldIndex, char* newIndex, char* newRecord) {
     return;
 }
 
+void commandDISPIProcess(char* index) {
+    Page readPage;
+    printf("Primary area index %d:\n", atoi(index));
+    getPrimaryPage(&readPage, atoi(index));
+    readPageOperations++;
+    for(int j = 0; j < BLOCKING_FACTOR_PAGE; j++) {
+        if (readPage.cell[j].key != 0) {
+            printf("Key: %010u | Value: %-30.30s | Overflow Pointer: %010u\n", readPage.cell[j].key, readPage.cell[j].record.data, readPage.cell[j].overflowPointer);
+        } else {
+            printf("---------- | ------------------------------ | ----------\n");
+        }
+    }
+}
+
 int processCommand(char* inputBuffor) {
     numberOfPages = 0;
     numberOfPages = countNumberOfPages();
@@ -969,7 +987,7 @@ int processCommand(char* inputBuffor) {
     } else if (strcmp(mnemonic, "ADD") == 0) {
         commandADDProcess(firstArgument);
     } else if (strcmp(mnemonic, "DISPI") == 0) {
-        printf("%s\n", firstArgument);
+        commandDISPIProcess(firstArgument);
     } else if (strcmp(mnemonic, "DEL") == 0) {
         commandDELProcess(firstArgument);
     } else if (strcmp(mnemonic, "MOD") == 0) {
