@@ -10,7 +10,7 @@
 #define OVERFLOW_AREA_NEW_FILE "OverflowAreaNewFile.txt"
 #define PRIMARY_AREA_NEW_FILE "PrimaryFileNewFile.txt"
 #define INDEX_AREA_NEW_FILE "IndexFileNewFile.txt"
-#define TEST_DATA_FILENAME "testData.txt"
+#define TEST_DATA_FILENAME "inputData.txt"
 #define MAX_RECORD_LENGTH 30 //30 characters + \n
 #define DIGITS_IN_MAX_INT 10
 #define BLOCKING_FACTOR_PAGE 4
@@ -96,9 +96,7 @@ char* generateValue(char* record) {
     return record;
 }
 
-int fileProcess() {
-    return 1;
-}
+
 
 int allocateOverflowArea(unsigned int numberOfPages) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
@@ -1036,6 +1034,36 @@ int commandLineLoop() {
     printf("Program ended by the user\n");
 }
 
+int fileProcess() {
+
+    char inputBufor[MAX_COMMAND_LENGTH] = {0};
+
+    FILE* file = fopen(TEST_DATA_FILENAME, "r");
+    printf("Processing commands from file: %s\n", TEST_DATA_FILENAME);
+    while (fgets(inputBufor, MAX_COMMAND_LENGTH, file)) {
+        if (mainOverflowCounter > overflowAreaSizeGlobal - 1) {
+            reorganiseFile();
+        }
+        size_t len = strlen(inputBufor);
+        if (len > 0 && inputBufor[len - 1] == '\n') {
+            inputBufor[len - 1] = '\0';
+        }
+        if (strlen(inputBufor) == 0) {
+            continue;
+        }
+
+
+        processCommand(inputBufor);
+        
+        clearInputBufor(inputBufor);
+    }
+
+    fclose(file);
+    printf("End of file reached\n");
+    return 0;
+}
+
+
 int main() {
     int decision = 0;
     while (decision!=1 && decision!=2) {
@@ -1047,7 +1075,6 @@ int main() {
     printf("You picked %d\n", decision);
 
     if(decision == 1) {
-        printf("This option in not Implemented\n");
         return fileProcess();
     } else if (decision == 2) {
         return commandLineLoop();
