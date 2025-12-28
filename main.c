@@ -16,7 +16,6 @@
 #define BLOCKING_FACTOR_PAGE 4
 #define ALFA_FACTOR 0.5
 #define MAX_RECORDS _CRT_INT_MAX
-#define REORGANIZATION_OVERFLOW_SIZE 3
 #define MAX_COMMAND_LENGTH 47
 #define MAX_MNEMONIC_LENGTH 7
 #define CHARACTER_SET "abcdefghijklmnopqrstuvwxyz"
@@ -27,11 +26,13 @@
 #define PRIMARY_PAGE_LENGTH (PRIMARY_RECORD_LENGTH * BLOCKING_FACTOR_PAGE)
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
+
 unsigned int numberOfPages =  0; //it is rather index than number (number = index+1)
 unsigned int numberOfRecords = 0;
 unsigned int mainOverflowCounter = 1;
 unsigned int readPageOperations = 0;
 unsigned int writePageOperatuons = 0;
+unsigned int overflowAreaSizeGlobal = 0;
 
 
 typedef struct Record {
@@ -112,6 +113,8 @@ int fileProcess() {
 int allocateOverflowArea(unsigned int numberOfPages) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
     unsigned int overflowAreaSize = (unsigned int)fmax(ceil((numberOfPages * BLOCKING_FACTOR_PAGE * OVERFLOW_AREA_RATIO)),BLOCKING_FACTOR_PAGE);
+    overflowAreaSize = overflowAreaSize + (overflowAreaSize%BLOCKING_FACTOR_PAGE);
+    overflowAreaSizeGlobal = overflowAreaSize;
     for(unsigned int i = 0; i < overflowAreaSize; i++) {
         fprintf(overflowFile, "%010u;%-30.30s;%010u\n", 0, "", 0);
     }
@@ -122,6 +125,8 @@ int allocateOverflowArea(unsigned int numberOfPages) {
 int allocateNewOverflowArea(unsigned int numberOfPages) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_NEW_FILE, "r+b");
     unsigned int overflowAreaSize = (unsigned int)fmax(ceil((numberOfPages * BLOCKING_FACTOR_PAGE * OVERFLOW_AREA_RATIO)),BLOCKING_FACTOR_PAGE);
+    overflowAreaSize = overflowAreaSize + (overflowAreaSize%BLOCKING_FACTOR_PAGE);
+    overflowAreaSizeGlobal = overflowAreaSize;
     for(unsigned int i = 0; i < overflowAreaSize; i++) {
         fprintf(overflowFile, "%010u;%-30.30s;%010u\n", 0, "", 0);
     }
@@ -356,11 +361,7 @@ int writePageToNewPrimary(Page page, unsigned int index) {
 int writePageToOverflowArea(Page page, unsigned int currentOverflowIndex) {
     FILE* overflowFile = fopen(OVERFLOW_AREA_FILENAME, "r+b");
     long pageSize = (long)PRIMARY_PAGE_LENGTH;
-    int minusOne = 1;
-    if(currentOverflowIndex==0){
-        minusOne = 0;
-    }
-    long offset = (long)(currentOverflowIndex-minusOne) * PRIMARY_RECORD_LENGTH;
+    long offset = (long)(currentOverflowIndex-1) * PRIMARY_RECORD_LENGTH;
     fseek(overflowFile, offset, SEEK_SET);
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++){
         unsigned int currentKey = page.cell[i].key;
@@ -421,6 +422,7 @@ int writeCellToOverflow(Cell cell, unsigned int overflowIndexInstert, unsigned i
     unsigned int indexOfRecordInPage = 0;
     memset(&readPage, 0, sizeof(Page));
     while (!isInserted && !readPageFromOverflowArea(&readPage, index)) {
+        index++;
         for (int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
             indexOfRecordInPage = i;
             if (readPage.cell[i].key==0) {
@@ -431,11 +433,11 @@ int writeCellToOverflow(Cell cell, unsigned int overflowIndexInstert, unsigned i
                 break;
             }
         }
-        index++;
     }
-    *primaryPageRecordOverflowIndex = index + indexOfRecordInPage;
+    if (index>2) {index -= 1;}
+    *primaryPageRecordOverflowIndex = (index+indexOfRecordInPage);
     if(isInserted) {
-        writePageToOverflowArea(readPage, overflowIndexInstert);
+        writePageToOverflowArea(readPage, index);
         writePageOperatuons++;
     }
     fclose(overflowFile);
@@ -449,6 +451,12 @@ int insertCellToFile(Cell cell) {
     int insertedInPrimary = 0; 
     getPrimaryPage(&readPage, indexOfPage);
     readPageOperations++; 
+    if (readPage.cell[BLOCKING_FACTOR_PAGE - 1].key != 0 
+        && numberOfPages-1 > indexOfPage
+        && cell.key < readPage.cell[BLOCKING_FACTOR_PAGE - 1].key) {
+        indexOfPage++;
+        getPrimaryPage(&readPage, indexOfPage);
+    }
     for(int i = 0; i < BLOCKING_FACTOR_PAGE; i++) {
         if (readPage.cell[i].key == 0){
             readPage.cell[i].key = cell.key;
@@ -508,7 +516,23 @@ int insertCellToFile(Cell cell) {
                                 printf("Error: Overflow Area is full.\n");
                                 return 1;
                             }
-                        } 
+                        } else if (currentOverflowCell->key < cell.key) {
+                            currentPrimaryOverflowPointer = currentOverflowCell->overflowPointer;
+                             if (writeCellToOverflow(cell, currentPtr-1, &newOverflowIndex) == 0) {
+                                if (previousPtr == i) { 
+                                    prevCell->overflowPointer = newOverflowIndex;
+                                } else { 
+                
+                                }
+                                writePageToPrimary(readPage, indexOfPage);
+                                writePageOperatuons++;
+                                mainOverflowCounter++;
+                                return 0; 
+                            } else {
+                                printf("Error: Overflow Area is full.\n");
+                                return 1;
+                            }
+                        }
                         
                         previousPtr = currentPtr;
                         currentPtr = currentOverflowCell->overflowPointer; 
@@ -524,8 +548,8 @@ int insertCellToFile(Cell cell) {
                     } else {
                         printf("Error: Overflow Area is full.\n");
                         return 1;
-                    }
                 }
+            }
         }
     }
 
@@ -936,7 +960,7 @@ int commandLineLoop() {
     printf("Write help for list of commands\n");
     printf("Write exit to exit the program\n");
     while(!exit) {
-        if(mainOverflowCounter >= REORGANIZATION_OVERFLOW_SIZE) {
+        if(mainOverflowCounter > overflowAreaSizeGlobal-1) {
             reorganiseFile();
         }
         printf("SBD_DISK\\: ");
